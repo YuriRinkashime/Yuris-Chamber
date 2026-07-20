@@ -141,7 +141,7 @@ export const botConfig = {
     },
     footer: {
       // Default footer text used in bot embeds.
-      text: "Titan Bot",
+      text: "Yuri's Chamber",
       // Footer icon URL (null = no icon).
       icon: null,
     },
@@ -462,7 +462,7 @@ export const botConfig = {
     counter: true,
 
     // Security and self-service systems.
-    verification: false,
+    verification: true,
     reactionRoles: true,
     joinToCreate: true,
 
