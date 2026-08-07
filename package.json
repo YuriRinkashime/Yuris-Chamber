@@ -1,0 +1,25 @@
+{
+  "name": "yuris-chamber",
+  "version": "3.0.0",
+  "description": "Yuri's Chamber — Discord bot for BANORANT PH",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "@discordjs/rest": "^2.6.1",
+    "axios": "^1.15.2",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.0.0",
+    "node-cron": "^4.2.1",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  }
+}
