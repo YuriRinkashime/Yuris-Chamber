@@ -1,6 +1,5 @@
 // database.js — facade re-exporting split modules for backward compatibility
 
-import { pgDb } from './postgresDatabase.js';
 import { logger } from './logger.js';
 import { BotConfig, getDefaultApplicationQuestions } from '../config/bot.js';
 
