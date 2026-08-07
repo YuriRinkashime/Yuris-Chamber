@@ -1,10 +1,7 @@
 import { Events, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getColor, botConfig } from '../config/bot.js';
-import { getGuildConfig } from '../services/config/guildConfig.js';
 import { getWelcomeConfig } from '../utils/database.js';
 import { formatWelcomeMessage } from '../utils/welcome.js';
-import { logEvent, EVENT_TYPES } from '../services/loggingService.js';
-import { setBirthday as dbSetBirthday } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
 import {
   isMaintenanceModeRuntime,
@@ -19,184 +16,89 @@ export default {
     try {
       const { guild, user } = member;
 
-      // --- Maintenance join notice ---
       if (isMaintenanceModeRuntime()) {
         const msg =
           getMaintenanceMessage() ||
           'Bot is under maintenance, all commands has been disabled. Please wait for the bot to online.';
-
-        const welcomeConfigEarly = await getWelcomeConfig(member.client, guild.id).catch(() => null);
-        const channelId = welcomeConfigEarly?.channelId || guild.systemChannelId;
-        let channel = channelId ? guild.channels.cache.get(channelId) : null;
-        if (!channel && channelId) {
-          channel = await guild.channels.fetch(channelId).catch(() => null);
-        }
-
-        if (channel?.isTextBased?.()) {
-          const me = guild.members.me;
-          const perms = channel.permissionsFor(me);
-          if (perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
-            await channel
-              .send({ content: `${user} 🛠️ **Maintenance**\n${msg}` })
-              .catch(() => {});
+        try {
+          const welcomeConfigEarly = await getWelcomeConfig(member.client, guild.id);
+          const channelId = welcomeConfigEarly?.channelId || guild.systemChannelId;
+          let channel = channelId ? guild.channels.cache.get(channelId) : null;
+          if (!channel && channelId) {
+            channel = await guild.channels.fetch(channelId).catch(() => null);
           }
-        }
-
+          if (channel?.isTextBased?.()) {
+            const me = guild.members.me;
+            const perms = channel.permissionsFor(me);
+            if (perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+              await channel
+                .send({ content: `${user} 🛠️ **Maintenance**\n${msg}` })
+                .catch(() => {});
+            }
+          }
+        } catch (_) {}
         await user.send(`🛠️ **${guild.name}** is under maintenance.\n${msg}`).catch(() => {});
       }
 
-      const config = await getGuildConfig(member.client, guild.id);
-      const welcomeConfig = await getWelcomeConfig(member.client, guild.id);
-      const welcomeChannelId = welcomeConfig?.channelId;
+      const welcomeConfig = await getWelcomeConfig(member.client, guild.id).catch(() => null);
+      if (!welcomeConfig?.enabled && !welcomeConfig?.channelId) return;
 
-      if (welcomeConfig?.enabled && welcomeChannelId) {
-        const channel = guild.channels.cache.get(welcomeChannelId);
-        const me = guild.members.me;
-        const permissions =
-          channel?.isTextBased?.() && me ? channel.permissionsFor(me) : null;
+      const channelId = welcomeConfig?.channelId;
+      if (!channelId) return;
 
-        if (
-          permissions?.has([
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-          ])
-        ) {
-          const formatData = { user, guild, member };
-          const welcomeMessage = formatWelcomeMessage(
-            welcomeConfig.welcomeMessage ||
-              welcomeConfig.welcomeEmbed?.description ||
-              botConfig.welcome?.defaultWelcomeMessage ||
-              'Welcome {user} to {server}!',
-            formatData,
-          );
+      let channel = guild.channels.cache.get(channelId);
+      if (!channel) channel = await guild.channels.fetch(channelId).catch(() => null);
+      if (!channel?.isTextBased?.()) return;
 
-          const messageContent = welcomeConfig.welcomePing ? user.toString() : null;
-          const embedTitle = formatWelcomeMessage(
-            welcomeConfig.welcomeEmbed?.title || '🎉 Welcome!',
-            formatData,
-          );
-          const embedFooter = welcomeConfig.welcomeEmbed?.footer
-            ? formatWelcomeMessage(welcomeConfig.welcomeEmbed.footer, formatData)
-            : `Welcome to ${guild.name}!`;
-
-          const canEmbed = permissions.has(PermissionFlagsBits.EmbedLinks);
-
-          if (!canEmbed) {
-            await channel.send({ content: messageContent || welcomeMessage });
-          } else {
-            const embed = new EmbedBuilder()
-              .setColor(welcomeConfig.welcomeEmbed?.color || getColor('success'))
-              .setTitle(embedTitle)
-              .setDescription(welcomeMessage)
-              .setThumbnail(user.displayAvatarURL())
-              .addFields(
-                { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
-                {
-                  name: 'Member Count',
-                  value: guild.memberCount.toString(),
-                  inline: true,
-                },
-              )
-              .setTimestamp()
-              .setFooter({ text: embedFooter });
-
-            if (welcomeConfig.welcomeImage) {
-              embed.setImage(welcomeConfig.welcomeImage);
-            } else if (welcomeConfig.welcomeEmbed?.image?.url) {
-              embed.setImage(welcomeConfig.welcomeEmbed.image.url);
-            }
-
-            await channel.send({ content: messageContent, embeds: [embed] });
-          }
-        }
+      const me = guild.members.me;
+      const permissions = me ? channel.permissionsFor(me) : null;
+      if (!permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+        return;
       }
 
-      if (welcomeConfig?.roleIds && welcomeConfig.roleIds.length > 0) {
-        const delay = welcomeConfig.autoRoleDelay || 0;
-        const singleRoleId = welcomeConfig.roleIds[0];
+      const formatData = { user, guild, member };
+      const welcomeMessage = formatWelcomeMessage(
+        welcomeConfig.joinMessage ||
+          welcomeConfig.joinEmbed?.description ||
+          botConfig.welcome?.defaultWelcomeMessage ||
+          'Welcome {user} to **{server}**!',
+        formatData,
+      );
 
-        if (delay > 0) {
-          const timeout = setTimeout(async () => {
-            const role = guild.roles.cache.get(singleRoleId);
-            if (role) await assignRoleSafely(member, role);
-          }, delay * 1000);
-          if (typeof timeout.unref === 'function') timeout.unref();
-        } else {
-          const role = guild.roles.cache.get(singleRoleId);
-          if (role) await assignRoleSafely(member, role);
-        }
-      }
+      const embedTitle = formatWelcomeMessage(
+        welcomeConfig.joinEmbed?.title || '👋 Welcome',
+        formatData,
+      );
+      const embedFooter = welcomeConfig.joinEmbed?.footer
+        ? formatWelcomeMessage(welcomeConfig.joinEmbed.footer, formatData)
+        : `Welcome to ${guild.name}!`;
 
-      if (config?.verification?.enabled || config?.verification?.autoVerify?.enabled) {
-        await handleVerification(member, guild, config.verification, member.client);
-      }
+      if (permissions.has(PermissionFlagsBits.EmbedLinks)) {
+        const embed = new EmbedBuilder()
+          .setTitle(embedTitle)
+          .setDescription(welcomeMessage)
+          .setColor(welcomeConfig.joinEmbed?.color || getColor('success') || 0xc4a1ff)
+          .setThumbnail(user.displayAvatarURL())
+          .addFields(
+            { name: 'User', value: `${user.tag}`, inline: true },
+            { name: 'Member Count', value: String(guild.memberCount), inline: true },
+          )
+          .setTimestamp()
+          .setFooter({ text: embedFooter });
 
-      try {
-        await logEvent({
-          client: member.client,
-          guildId: guild.id,
-          eventType: EVENT_TYPES.MEMBER_JOIN,
-          data: {
-            title: 'User joined',
-            lines: [
-              `**User:** ${user.toString()} (${user.displayName !== user.username ? `@${user.displayName}` : user.tag})`,
-              `**ID:** \`${user.id}\``,
-              `**Created:** <t:${Math.floor(user.createdTimestamp / 1000)}:R>`,
-              `**Members:** ${guild.memberCount}`,
-            ],
-            quoted: false,
-            thumbnail: user.displayAvatarURL({ dynamic: true }),
-            userId: user.id,
-          },
+        await channel.send({
+          content: welcomeConfig?.welcomePing ? `${user}` : undefined,
+          embeds: [embed],
+          allowedMentions: welcomeConfig?.welcomePing ? { users: [user.id] } : { parse: [] },
         });
-      } catch (error) {
-        logger.debug('Error logging member join:', error);
-      }
-
-      try {
-        for (const counter of counters) {
-          if (counter && counter.type && counter.channelId && counter.enabled !== false) {
-          }
-        }
-      } catch (error) {
-        logger.debug('Error updating counters on member join:', error);
-      }
-
-      try {
-        const backupKey = `guild:${guild.id}:birthdays:left`;
-        const backup = (await member.client.db.get(backupKey)) || {};
-        if (backup[user.id]) {
-          const { month, day, year } = backup[user.id];
-          await dbSetBirthday(member.client, guild.id, user.id, month, day, year);
-          delete backup[user.id];
-          await member.client.db.set(backupKey, backup);
-        }
-      } catch (error) {
-        logger.debug('Error restoring birthday on member join:', error);
+      } else {
+        await channel.send({
+          content: welcomeConfig?.welcomePing ? `${user} ${welcomeMessage}` : welcomeMessage,
+          allowedMentions: welcomeConfig?.welcomePing ? { users: [user.id] } : { parse: [] },
+        });
       }
     } catch (error) {
-      logger.error('Error in guildMemberAdd event:', error);
+      logger.error('Error in guildMemberAdd:', error);
     }
   },
 };
-
-async function handleVerification(member, guild, verificationConfig, client) {
-  const { autoVerifyOnJoin } = await import('../services/verificationService.js');
-  try {
-    await autoVerifyOnJoin(client, guild, member, verificationConfig);
-  } catch (error) {
-    logger.error('Error in auto-verification for member', {
-      guildId: guild.id,
-      userId: member.id,
-      error: error.message,
-    });
-  }
-}
-
-async function assignRoleSafely(member, role) {
-  try {
-    await member.roles.add(role);
-  } catch (error) {
-    logger.warn(`Failed to assign role ${role.id} to member ${member.id}:`, error);
-  }
-}
