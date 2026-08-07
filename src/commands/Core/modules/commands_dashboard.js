@@ -3,8 +3,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
-} from 'discord.js';
+  StringSelectMenuOptionBuilder,  MessageFlags} from 'discord.js';
 import { createEmbed } from '../../../utils/embeds.js';
 import {
   getCommandAccessSnapshot,
@@ -12,8 +11,7 @@ import {
   enableCategory,
   disableCommand,
   enableCommand,
-  resetCategoryCommands,
-} from '../../../services/commandAccessService.js';
+  resetCategoryCommands } from '../../../services/commandAccessService.js';
 import { getGuildConfig } from '../../../services/config/guildConfig.js';
 
 export const DASHBOARD_CATEGORY_SELECT = 'cmdaccess_category';
@@ -28,8 +26,7 @@ export const DASHBOARD_HOME = 'cmdaccess_home';
 const STATUS = {
   enabled: '🟢',
   partial: '🟡',
-  disabled: '🔴',
-};
+  disabled: '🔴' };
 
 function customId(base, guildId, suffix = '') {
   return suffix ? `${base}:${guildId}:${suffix}` : `${base}:${guildId}`;
@@ -91,13 +88,11 @@ export function buildOverviewEmbed(snapshot, guild) {
         `**${snapshot.enabledTotal}/${snapshot.totalCommands}** entries enabled`,
         `${STATUS.enabled} ${fullyEnabled} fully on · ${STATUS.partial} ${partial} partial · ${STATUS.disabled} ${disabled} off`,
       ].join('\n'),
-      inline: false,
-    },
+      inline: false },
     {
       name: '🔑 Legend',
       value: `${STATUS.enabled} All enabled · ${STATUS.partial} Some disabled · ${STATUS.disabled} Category off`,
-      inline: false,
-    },
+      inline: false },
   ];
 
   const chunks = chunkLines(categoryLines);
@@ -105,8 +100,7 @@ export function buildOverviewEmbed(snapshot, guild) {
     fields.push({
       name: index === 0 ? '📁 Categories' : '📁 Categories (cont.)',
       value: chunk,
-      inline: false,
-    });
+      inline: false });
   });
 
   fields.push({
@@ -115,16 +109,14 @@ export function buildOverviewEmbed(snapshot, guild) {
       '• Select a category below to manage commands and subcommands',
       '• `/commands disable` — turn off a category or specific command',
       '• `/commands enable` — turn something back on',
-    ].join('\n'),
-  });
+    ].join('\n') });
 
   return createEmbed({
     title: '⚙️ Command Access',
     description: `Manage slash and prefix commands for **${guild.name}**. Subcommands (e.g. \`birthday list\`) are listed separately.`,
     color: 'info',
     fields,
-    footer: '🔒 commands & configwizard always stay available',
-  });
+    footer: '🔒 commands & configwizard always stay available' });
 }
 
 export function buildCategoryEmbed(category, guild) {
@@ -146,13 +138,11 @@ export function buildCategoryEmbed(category, guild) {
     {
       name: `${statusIcon} Status`,
       value: statusText,
-      inline: true,
-    },
+      inline: true },
     {
       name: '📈 Count',
       value: `${category.enabledCount}/${category.totalCount} enabled`,
-      inline: true,
-    },
+      inline: true },
   ];
 
   const chunks = chunkLines(commandLines);
@@ -160,8 +150,7 @@ export function buildCategoryEmbed(category, guild) {
     fields.push({
       name: index === 0 ? '📋 Commands & Subcommands' : '📋 (cont.)',
       value: chunk,
-      inline: false,
-    });
+      inline: false });
   });
 
   fields.push({
@@ -170,16 +159,14 @@ export function buildCategoryEmbed(category, guild) {
       '• Use the dropdown to toggle individual commands or subcommands',
       '• **Disable All** turns off the whole category',
       '• **Clear Overrides** re-enables individually disabled entries',
-    ].join('\n'),
-  });
+    ].join('\n') });
 
   return createEmbed({
     title: `${category.icon} ${category.displayName}`,
     description: `Command access for **${guild.name}**.`,
     color: category.categoryDisabled ? 'error' : category.disabledCount > 0 ? 'warning' : 'success',
     fields,
-    footer: '🔒 Protected entries cannot be disabled',
-  });
+    footer: '🔒 Protected entries cannot be disabled' });
 }
 
 export function buildOverviewComponents(guildId, snapshot) {
@@ -276,21 +263,18 @@ export async function buildDashboardView(client, guildId, guild, view = 'overvie
     if (!category) {
       return {
         embed: buildOverviewEmbed(snapshot, guild),
-        components: buildOverviewComponents(guildId, snapshot),
-      };
+        components: buildOverviewComponents(guildId, snapshot) };
     }
 
     return {
       embed: buildCategoryEmbed(category, guild),
       components: buildCategoryComponents(guildId, category),
-      categoryKey,
-    };
+      categoryKey };
   }
 
   return {
     embed: buildOverviewEmbed(snapshot, guild),
-    components: buildOverviewComponents(guildId, snapshot),
-  };
+    components: buildOverviewComponents(guildId, snapshot) };
 }
 
 export async function handleDashboardComponent(interaction, client) {
@@ -302,8 +286,7 @@ export async function handleDashboardComponent(interaction, client) {
   if (guildId !== interaction.guildId) {
     return interaction.reply({
       content: 'This dashboard belongs to another server.',
-      ephemeral: true,
-    });
+      flags: MessageFlags.Ephemeral });
   }
 
   if (action === DASHBOARD_COMMAND_SELECT) {

@@ -22,8 +22,7 @@ export async function getAiConfig(client, guildId) {
     enabled: data?.enabled ?? process.env.AI_ENABLED === 'true',
     systemInstructions: data?.systemInstructions || DEFAULT_INSTRUCTIONS,
     model: data?.model || defaultModel(),
-    maxReplyLength: data?.maxReplyLength || 1800,
-  };
+    maxReplyLength: data?.maxReplyLength || 1800 };
 }
 
 export async function saveAiConfig(client, guildId, partial) {
@@ -50,8 +49,7 @@ export async function saveUserAiHistory(client, guildId, userId, messages) {
   const trimmed = messages.slice(-HISTORY_LIMIT);
   await client.db.set(historyKey(guildId, userId), {
     messages: trimmed,
-    updatedAt: Date.now(),
-  });
+    updatedAt: Date.now() });
   return trimmed;
 }
 
@@ -61,8 +59,7 @@ export async function clearUserAiHistory(client, guildId, userId) {
   } else {
     await client.db.set(historyKey(guildId, userId), {
       messages: [],
-      updatedAt: Date.now(),
-    });
+      updatedAt: Date.now() });
   }
 }
 
@@ -74,8 +71,7 @@ export async function getUserAiPrefs(client, guildId, userId) {
   return (
     (await client.db.get(prefsKey(guildId, userId), null)) || {
       language: null,
-      customStyle: null,
-    }
+      customStyle: null }
   );
 }
 
@@ -180,8 +176,7 @@ export async function saveDmAiHistory(client, userId, messages) {
   const trimmed = messages.slice(-HISTORY_LIMIT);
   await client.db.set(dmHistoryKey(userId), {
     messages: trimmed,
-    updatedAt: Date.now(),
-  });
+    updatedAt: Date.now() });
   return trimmed;
 }
 
@@ -191,8 +186,7 @@ export async function clearDmAiHistory(client, userId) {
   } else {
     await client.db.set(dmHistoryKey(userId), {
       messages: [],
-      updatedAt: Date.now(),
-    });
+      updatedAt: Date.now() });
   }
 }
 
@@ -233,8 +227,7 @@ export async function generateDmReply(client, userId, userMessage) {
 
   if (/\b(personal(ize)?|custom(ize)?|be my ai)\b/i.test(lower)) {
     await saveUserAiPrefs(client, guildId, userId, {
-      customStyle: String(userMessage).slice(0, 800),
-    });
+      customStyle: String(userMessage).slice(0, 800) });
   }
   if (/\b(reset (style|personality|ai)|default yuri|normal mode)\b/i.test(lower)) {
     await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
@@ -251,15 +244,15 @@ export async function generateDmReply(client, userId, userMessage) {
       `\n\nYou are in a private DM as Yuri for BANORANT PH.` +
       `\n${serverCtx}` +
       `\nUse the conversation history. Do not re-ask language preference if already set.` +
-      `\nBe short, friendly, Gen Z. Remember what THIS user already told you.`,
+      `\nBe short, friendly, Gen Z. Remember what THIS user already told you.` +
+      `\n\nMENTION RULE: Write mentions as <@USER_ID> only (never bare @numbers).`,
   );
 
   let answer = await generateReply({
     systemInstructions,
     userMessage: String(userMessage).slice(0, 1500),
     model: config.model,
-    history,
-  });
+    history });
 
   const maxLen = config.maxReplyLength || 1800;
   if (answer.length > maxLen) answer = answer.slice(0, maxLen - 3) + '...';
@@ -289,8 +282,7 @@ async function generateOpenAICompatible({
   history,
   apiKey,
   baseUrl,
-  label,
-}) {
+  label }) {
   if (!apiKey) throw new Error(`${label} API key is not set`);
 
   const messages = [
@@ -303,15 +295,12 @@ async function generateOpenAICompatible({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+      Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: model || defaultModel(),
       messages,
       max_tokens: 512,
-      temperature: 0.7,
-    }),
-  });
+      temperature: 0.7 }) });
 
   const raw = await res.text();
   if (!res.ok) {
@@ -335,8 +324,7 @@ export async function generateReply(opts) {
       ...opts,
       apiKey: process.env.NAGA_API_KEY || process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.naga.ac/v1',
-      label: 'Naga',
-    });
+      label: 'Naga' });
   }
 
   if (p === 'openai') {
@@ -344,8 +332,7 @@ export async function generateReply(opts) {
       ...opts,
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.openai.com/v1',
-      label: 'OpenAI',
-    });
+      label: 'OpenAI' });
   }
 
   const key = process.env.GEMINI_API_KEY;
@@ -358,13 +345,11 @@ export async function generateReply(opts) {
       ...(opts.history || []),
       { role: 'user', parts: [{ text: opts.userMessage }] },
     ],
-    generationConfig: { maxOutputTokens: 512, temperature: 0.7 },
-  };
+    generationConfig: { maxOutputTokens: 512, temperature: 0.7 } };
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+    body: JSON.stringify(body) });
   const errText = await res.text();
   if (!res.ok) {
     logger.error('Gemini error:', errText);

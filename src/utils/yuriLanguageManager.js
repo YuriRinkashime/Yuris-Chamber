@@ -1,3 +1,4 @@
+import { MessageFlags } from 'discord.js';
 import { getFromDb, setInDb } from './database.js';
 
 const LANG_KEY = (userId) => `user:lang:${userId}`;
@@ -22,9 +23,7 @@ export async function getUserLanguage(userId) {
 export async function sendYuriResponse(interaction, translations, isPublic = false) {
   if (isPublic) {
     return interaction.reply({
-      content: translations.english,
-      ephemeral: false,
-    });
+      content: translations.english });
   }
 
   const userLang = await getUserLanguage(interaction.user.id);
@@ -32,6 +31,5 @@ export async function sendYuriResponse(interaction, translations, isPublic = fal
 
   return interaction.reply({
     content,
-    ephemeral: true,
-  });
+    flags: MessageFlags.Ephemeral });
 }

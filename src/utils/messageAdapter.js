@@ -90,8 +90,7 @@ export function createMockInteraction(message, commandData, args) {
           id,
           username: 'Unknown',
           bot: false,
-          tag: 'Unknown#0000',
-        };
+          tag: 'Unknown#0000' };
       },
       getMember: (name) => {
         const userId = options.getUser(name);
@@ -128,9 +127,7 @@ export function createMockInteraction(message, commandData, args) {
       _hoistedOptions: args.map((arg, index) => ({
         name: commandData?.options?.[index]?.name || `arg${index}`,
         value: arg,
-        type: 3,
-      })),
-    },
+        type: 3 })) },
 
     createdTimestamp: message.createdTimestamp,
     createdAt: message.createdAt,
@@ -154,10 +151,7 @@ export function createMockInteraction(message, commandData, args) {
     },
 
     fetchReply: async () => coordinator.getReplyMessage() || message,
-
-    ephemeral: false,
-    webhook: null,
-  };
+    webhook: null };
 
   const coordinator = ResponseCoordinator.attach(mockInteraction, { message });
 
@@ -196,8 +190,7 @@ export async function executePrefixCommand(command, message, args, client, prefi
   try {
     const permissionAllowed = await enforceDefaultCommandPermissions(mockInteraction, command, {
       source: 'messageAdapter.executePrefixCommand',
-      guildConfig,
-    });
+      guildConfig });
     if (!permissionAllowed) {
       return;
     }
@@ -217,7 +210,6 @@ export async function executePrefixCommand(command, message, args, client, prefi
     await handleInteractionError(mockInteraction, error, {
       type: 'prefix_command',
       command: command.data?.name,
-      source: 'messageAdapter.executePrefixCommand',
-    });
+      source: 'messageAdapter.executePrefixCommand' });
   }
 }

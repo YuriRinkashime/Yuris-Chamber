@@ -13,8 +13,7 @@ export async function getThread(client, userId) {
       status: 'open',
       autoAiAt: null,
       ownerNotifyMessageId: null,
-      ownerNotifyChannelId: null,
-    }
+      ownerNotifyChannelId: null }
   );
 }
 
@@ -23,8 +22,7 @@ export async function saveThread(client, thread) {
   await client.db.set(THREAD_KEY(userId), {
     ...thread,
     userId,
-    updatedAt: Date.now(),
-  });
+    updatedAt: Date.now() });
   const inbox = (await client.db.get(INBOX_KEY, [])) || [];
   const next = [userId, ...inbox.filter((id) => id !== userId)].slice(0, 100);
   await client.db.set(INBOX_KEY, next);
@@ -47,8 +45,7 @@ export async function appendUserDm(client, user, content) {
   thread.messages.push({
     from: 'user',
     content: String(content).slice(0, 1800),
-    at: Date.now(),
-  });
+    at: Date.now() });
   thread.status = 'waiting_owner';
   thread.autoAiAt = Date.now() + AUTO_AI_MS;
   thread.messages = thread.messages.slice(-30);
@@ -62,8 +59,7 @@ export async function appendBotDm(client, userId, content, by = 'owner') {
   thread.messages.push({
     from: by,
     content: String(content).slice(0, 1800),
-    at: Date.now(),
-  });
+    at: Date.now() });
   thread.status = 'open';
   thread.autoAiAt = null;
   thread.messages = thread.messages.slice(-30);
@@ -98,8 +94,7 @@ export function scheduleAutoAi(client, userId) {
       const {
         getAiConfig,
         generateReply,
-        buildSystemInstructions,
-      } = await import('./aiService.js');
+        buildSystemInstructions } = await import('./aiService.js');
 
       const guildId = process.env.GUILD_ID;
       const config = await getAiConfig(client, guildId);
@@ -115,20 +110,18 @@ export function scheduleAutoAi(client, userId) {
         ),
         userMessage: lastUser.content,
         model: config.model,
-        history: [],
-      });
+        history: [] });
       if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
 
       const user = await client.users.fetch(id).catch(() => null);
       if (!user) return;
 
-      await user.send({ content: answer });
+      await user.send({ content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`), allowedMentions: { parse: ['users'] } });
       await appendBotDm(client, id, answer, 'ai');
       await updateOwnerNotify(client, id, {
         footer: '🤖 Auto-AI sent',
         lastSent: answer,
-        disableButtons: false,
-      });
+        disableButtons: false });
     } catch (e) {
       console.error('Auto AI DM failed:', e?.message || e);
     }
@@ -171,8 +164,7 @@ export async function upsertOwnerNotify(
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle,
-  } = await import('discord.js');
+    ButtonStyle } = await import('discord.js');
 
   const thread = await getThread(client, userId);
   const ownerIds = (process.env.OWNER_IDS || process.env.OWNER_ID || '')
@@ -193,8 +185,7 @@ export async function upsertOwnerNotify(
         formatThreadPreview(thread, { lastSent }),
     )
     .setFooter({
-      text: footer || (disableButtons ? 'Handled' : 'AI reply or your words'),
-    })
+      text: footer || (disableButtons ? 'Handled' : 'AI reply or your words') })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(

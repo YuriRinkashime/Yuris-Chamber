@@ -3,27 +3,23 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  MessageFlags,
-} from 'discord.js';
+  MessageFlags } from 'discord.js';
 import {
   getAiConfig,
   generateReply,
-  buildSystemInstructions,
-} from '../../../services/aiService.js';
+  buildSystemInstructions } from '../../../services/aiService.js';
 import {
   appendBotDm,
   getThread,
   cancelAutoAi,
-  updateOwnerNotify,
-} from '../../../services/dmInboxService.js';
+  updateOwnerNotify } from '../../../services/dmInboxService.js';
 import { isBotOwner } from '../../../config/bot.js';
 
 async function aiReply(interaction, client, userId) {
   if (!isBotOwner(interaction.user.id)) {
     return interaction.reply({
       content: 'Owner only.',
-      flags: MessageFlags.Ephemeral,
-    });
+      flags: MessageFlags.Ephemeral });
   }
 
   cancelAutoAi(userId);
@@ -58,28 +54,24 @@ async function aiReply(interaction, client, userId) {
     systemInstructions,
     userMessage,
     model: config.model,
-    history: [],
-  });
+    history: [] });
   if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
 
-  await user.send({ content: answer });
+  await user.send({ content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`), allowedMentions: { parse: ['users'] } });
   await appendBotDm(client, userId, answer, 'ai');
   await updateOwnerNotify(client, userId, {
     lastSent: answer,
-    footer: '🤖 AI reply sent',
-  });
+    footer: '🤖 AI reply sent' });
 
   return interaction.editReply({
-    content: (`**🤖 AI → ${user.tag}**\n\n${answer}`).slice(0, 2000),
-  });
+    content: (`**🤖 AI → ${user.tag}**\n\n${answer}`).slice(0, 2000) });
 }
 
 async function humanReplyModal(interaction, userId) {
   if (!isBotOwner(interaction.user.id)) {
     return interaction.reply({
       content: 'Owner only.',
-      flags: MessageFlags.Ephemeral,
-    });
+      flags: MessageFlags.Ephemeral });
   }
 
   cancelAutoAi(userId);
@@ -113,13 +105,11 @@ export default [
     async execute(interaction, client, args = []) {
       const userId = args[0] || interaction.customId.split(':')[1];
       return aiReply(interaction, client, userId);
-    },
-  },
+    } },
   {
     name: 'dm_human',
     async execute(interaction, client, args = []) {
       const userId = args[0] || interaction.customId.split(':')[1];
       return humanReplyModal(interaction, userId);
-    },
-  },
+    } },
 ];

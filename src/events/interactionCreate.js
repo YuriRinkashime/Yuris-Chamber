@@ -5,8 +5,7 @@ import {
   getBotMessage,
   isBotOwner,
   isCommandCategoryEnabled,
-  isMaintenanceMode,
-} from '../config/bot.js';
+  isMaintenanceMode } from '../config/bot.js';
 import botConfig from '../config/bot.js';
 import { handleInteractionError, createError, ErrorTypes, ErrorCodes } from '../utils/errorHandler.js';
 import { InteractionHelper } from '../utils/interactionHelper.js';
@@ -20,8 +19,7 @@ import { ResponseCoordinator } from '../utils/responseCoordinator.js';
 import { enforceDefaultCommandPermissions } from '../utils/permissionGuard.js';
 import {
   isMaintenanceModeRuntime,
-  getMaintenanceMessage,
-} from '../services/runtimeSettings.js';
+  getMaintenanceMessage } from '../services/runtimeSettings.js';
 
 const COMMAND_ERROR_SUBTYPES = {
   warn: 'warn_failed',
@@ -36,8 +34,7 @@ const COMMAND_ERROR_SUBTYPES = {
   gcreate: 'giveaway_failed',
   gend: 'giveaway_failed',
   gdelete: 'giveaway_failed',
-  greroll: 'giveaway_failed',
-};
+  greroll: 'giveaway_failed' };
 
 function withTraceContext(context = {}, traceContext = {}) {
   return {
@@ -45,8 +42,7 @@ function withTraceContext(context = {}, traceContext = {}) {
     guildId: context.guildId || traceContext.guildId,
     userId: context.userId || traceContext.userId,
     command: context.commandName || traceContext.command,
-    ...context,
-  };
+    ...context };
 }
 
 export default {
@@ -80,9 +76,9 @@ export default {
             'Bot is under maintenance, all commands has been disabled. Please wait for the bot to online.';
           try {
             if (interaction.replied || interaction.deferred) {
-              await interaction.followUp({ content: `🛠️ ${msg}`, ephemeral: true });
+              await interaction.followUp({ content: `🛠️ ${msg}`, flags: MessageFlags.Ephemeral });
             } else {
-              await interaction.reply({ content: `🛠️ ${msg}`, ephemeral: true });
+              await interaction.reply({ content: `🛠️ ${msg}`, flags: MessageFlags.Ephemeral });
             }
           } catch (_) {}
           return;
@@ -121,16 +117,14 @@ export default {
               traceId: interactionTraceContext.traceId,
               guildId: interaction.guildId,
               userId: interaction.user?.id,
-              command: interaction.commandName,
-            });
+              command: interaction.commandName });
 
             validateChatInputPayloadOrThrow(
               interaction,
               withTraceContext(
                 {
                   type: 'command_input_validation',
-                  commandName: interaction.commandName,
-                },
+                  commandName: interaction.commandName },
                 interactionTraceContext,
               ),
             );
@@ -165,8 +159,7 @@ export default {
                   withTraceContext(
                     {
                       commandName: interaction.commandName,
-                      subtype: 'dm_blocked',
-                    },
+                      subtype: 'dm_blocked' },
                     interactionTraceContext,
                   ),
                 );
@@ -194,8 +187,7 @@ export default {
                 withTraceContext(
                   {
                     commandName: interaction.commandName,
-                    category: command.category,
-                  },
+                    category: command.category },
                   interactionTraceContext,
                 ),
               );
@@ -216,8 +208,7 @@ export default {
                   withTraceContext(
                     {
                       commandName: interaction.commandName,
-                      remainingSec,
-                    },
+                      remainingSec },
                     interactionTraceContext,
                   ),
                 );
@@ -249,8 +240,7 @@ export default {
                     expected: true,
                     cooldownMs: abuseProtection.remainingMs,
                     cooldownWindowMs: abuseProtection.policy?.windowMs,
-                    cooldownMaxAttempts: abuseProtection.policy?.maxAttempts,
-                  },
+                    cooldownMaxAttempts: abuseProtection.policy?.maxAttempts },
                   interactionTraceContext,
                 ),
               );
@@ -279,8 +269,7 @@ export default {
                   withTraceContext(
                     {
                       commandName: accessKey,
-                      guildId: interaction.guild.id,
-                    },
+                      guildId: interaction.guild.id },
                     interactionTraceContext,
                   ),
                 );
@@ -290,8 +279,7 @@ export default {
             const permissionAllowed =
               await enforceDefaultCommandPermissions(interaction, command, {
                 source: 'interactionCreate',
-                guildConfig,
-              });
+                guildConfig });
             if (!permissionAllowed) {
               return;
             }
@@ -307,8 +295,7 @@ export default {
                   commandName: interaction.commandName,
                   subtype:
                     COMMAND_ERROR_SUBTYPES[interaction.commandName] ||
-                    error?.context?.subtype,
-                },
+                    error?.context?.subtype },
                 interactionTraceContext,
               ),
             );
@@ -324,8 +311,7 @@ export default {
               logger.error('Error handling command autocomplete:', {
                 error: error.message,
                 guildId: interaction.guildId,
-                commandName: interaction.commandName,
-              });
+                commandName: interaction.commandName });
               await interaction.respond([]).catch(() => {});
             }
             return;
@@ -361,15 +347,13 @@ export default {
               await interaction.respond(
                 filtered.slice(0, 25).map((role) => ({
                   name: `${role.name}${role.enabled === false ? ' (disabled)' : ''}`,
-                  value: role.name,
-                })),
+                  value: role.name })),
               );
             } catch (error) {
               logger.error('Error handling autocomplete:', {
                 error: error.message,
                 guildId: interaction.guildId,
-                commandName: interaction.commandName,
-              });
+                commandName: interaction.commandName });
               await interaction.respond([]);
             }
           } else if (
@@ -398,15 +382,13 @@ export default {
               await interaction.respond(
                 filtered.slice(0, 25).map((role) => ({
                   name: `${role.name}${role.enabled === false ? ' (disabled)' : ''}`,
-                  value: role.name,
-                })),
+                  value: role.name })),
               );
             } catch (error) {
               logger.error('Error handling app-admin autocomplete:', {
                 error: error.message,
                 guildId: interaction.guildId,
-                commandName: interaction.commandName,
-              });
+                commandName: interaction.commandName });
               await interaction.respond([]);
             }
           } else if (
@@ -416,8 +398,7 @@ export default {
             try {
               const {
                 getAllReactionRoleMessages,
-                deleteReactionRoleMessage,
-              } = await import('../services/reactionRoleService.js');
+                deleteReactionRoleMessage } = await import('../services/reactionRoleService.js');
               const guildId = interaction.guildId;
               const guild = interaction.guild;
 
@@ -478,8 +459,7 @@ export default {
 
                     return {
                       name: `${title} (${channelName})`.substring(0, 100),
-                      value: panel.messageId,
-                    };
+                      value: panel.messageId };
                   } catch (e) {
                     return null;
                   }
@@ -491,8 +471,7 @@ export default {
               logger.error('Error handling reactroles autocomplete:', {
                 error: error.message,
                 guildId: interaction.guildId,
-                commandName: interaction.commandName,
-              });
+                commandName: interaction.commandName });
               await interaction.respond([]);
             }
           }
@@ -514,8 +493,7 @@ export default {
                     {
                       type: 'button',
                       customId: interaction.customId,
-                      handler: 'todo',
-                    },
+                      handler: 'todo' },
                     interactionTraceContext,
                   ),
                 );
@@ -560,8 +538,7 @@ export default {
                 {
                   type: 'button',
                   customId: interaction.customId,
-                  handler: 'general',
-                },
+                  handler: 'general' },
                 interactionTraceContext,
               ),
             );
@@ -595,8 +572,7 @@ export default {
               withTraceContext(
                 {
                   type: 'select_menu',
-                  customId: interaction.customId,
-                },
+                  customId: interaction.customId },
                 interactionTraceContext,
               ),
             );
@@ -618,8 +594,7 @@ export default {
                   {
                     type: 'modal',
                     customId: interaction.customId,
-                    handler: 'application',
-                  },
+                    handler: 'application' },
                   interactionTraceContext,
                 ),
               );
@@ -638,8 +613,7 @@ export default {
               `Skipping modal handler lookup for inline-awaited modal: ${interaction.customId}`,
               {
                 event: 'interaction.modal.inline_skipped',
-                traceId: interactionTraceContext.traceId,
-              },
+                traceId: interactionTraceContext.traceId },
             );
             return;
           }
@@ -670,8 +644,7 @@ export default {
                 {
                   type: 'modal',
                   customId: interaction.customId,
-                  handler: 'general',
-                },
+                  handler: 'general' },
                 interactionTraceContext,
               ),
             );
@@ -685,8 +658,7 @@ export default {
           traceId: interactionTraceContext.traceId,
           interactionId: interaction.id,
           guildId: interaction.guildId,
-          userId: interaction.user?.id,
-        });
+          userId: interaction.user?.id });
 
         try {
           await handleInteractionError(
@@ -697,8 +669,7 @@ export default {
                 type: 'interaction',
                 commandName: interaction.commandName,
                 customId: interaction.customId,
-                source: 'interactionCreate.unhandled',
-              },
+                source: 'interactionCreate.unhandled' },
               interactionTraceContext,
             ),
           );
@@ -707,10 +678,8 @@ export default {
             event: 'interaction.error_response_failed',
             errorCode: ErrorCodes.INTERACTION_RESPONSE_FAILED,
             error: replyError,
-            traceId: interactionTraceContext.traceId,
-          });
+            traceId: interactionTraceContext.traceId });
         }
       }
     });
-  },
-};
+  } };

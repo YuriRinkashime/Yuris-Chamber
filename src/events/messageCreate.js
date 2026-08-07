@@ -29,8 +29,7 @@ export default {
             appendUserDm,
             scheduleAutoAi,
             cancelAutoAi,
-            upsertOwnerNotify,
-          } = await import('../services/dmInboxService.js');
+            upsertOwnerNotify } = await import('../services/dmInboxService.js');
           const { isBotOwner } = await import('../config/bot.js');
 
           const content = message.content?.trim();
@@ -43,8 +42,7 @@ export default {
           // ALWAYS refresh the Discord card (even if sender is owner — for testing)
           await upsertOwnerNotify(client, message.author.id, {
             disableButtons: false,
-            footer: 'New message · AI reply or your words',
-          });
+            footer: 'New message · AI reply or your words' });
 
           // Don't also spam other owners if the sender is an owner
           // (upsert already DMs/edits for OWNER_IDS)
@@ -78,8 +76,7 @@ export default {
               getUserAiHistory,
               saveUserAiHistory,
               buildSystemInstructions,
-              saveUserAiPrefs,
-            } = await import('../services/aiService.js');
+              saveUserAiPrefs } = await import('../services/aiService.js');
 
             const guildId = message.guild.id;
             const userId = message.author.id;
@@ -100,8 +97,7 @@ export default {
               }
               if (/\b(personal(ize)?|custom(ize)?|be my ai)\b/i.test(lower)) {
                 await saveUserAiPrefs(client, guildId, userId, {
-                  customStyle: userMessage.slice(0, 800),
-                });
+                  customStyle: userMessage.slice(0, 800) });
               }
               if (/\b(reset (style|personality|ai)|default yuri)\b/i.test(lower)) {
                 await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
@@ -119,8 +115,7 @@ export default {
                 systemInstructions,
                 userMessage,
                 model: config.model,
-                history,
-              });
+                history });
               if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
 
               await saveUserAiHistory(client, guildId, userId, [
@@ -129,7 +124,9 @@ export default {
                 { role: 'model', parts: [{ text: answer }] },
               ]);
 
-              await message.reply({ content: answer }).catch(() => {});
+              await message.reply({
+                content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`),
+                allowedMentions: { parse: ['users', 'roles'] } }).catch(() => {});
               return;
             }
           }
@@ -163,8 +160,7 @@ export default {
     } catch (error) {
       logger.error('Error in messageCreate:', error);
     }
-  },
-};
+  } };
 
 async function handlePrefixCommand(message, client) {
   try {
@@ -200,9 +196,7 @@ async function handlePrefixCommand(message, client) {
         embeds: [createEmbed({
           title: 'Maintenance Mode',
           description: getBotMessage('maintenanceMode'),
-          color: 'warning',
-        })],
-      }).catch(() => {});
+          color: 'warning' })] }).catch(() => {});
       return;
     }
 
@@ -211,9 +205,7 @@ async function handlePrefixCommand(message, client) {
         embeds: [createEmbed({
           title: 'Feature Disabled',
           description: getBotMessage('commandDisabled'),
-          color: 'error',
-        })],
-      }).catch(() => {});
+          color: 'error' })] }).catch(() => {});
       return;
     }
 
@@ -223,8 +215,7 @@ async function handlePrefixCommand(message, client) {
         const embed = createEmbed({
           title: 'Slash Command Only',
           description: `${restriction.reason}\nUse \`/${resolvedCommandName}\` instead.`,
-          color: 'info',
-        });
+          color: 'info' });
         await message.channel.send({ embeds: [embed] }).catch(() => {});
       }
       return;
@@ -234,16 +225,14 @@ async function handlePrefixCommand(message, client) {
       const embed = createEmbed({
         title: 'Command Disabled',
         description: 'This command has been disabled for this server.',
-        color: 'error',
-      });
+        color: 'error' });
       await message.channel.send({ embeds: [embed] }).catch(() => {});
       return;
     }
 
     const mockInteractionForProtection = {
       guildId: message.guild.id,
-      user: message.author,
-    };
+      user: message.author };
     const abuseProtection = await enforceAbuseProtection(
       mockInteractionForProtection,
       command,
@@ -254,8 +243,7 @@ async function handlePrefixCommand(message, client) {
       const embed = createEmbed({
         title: 'Command Cooldown',
         description: `This command is on cooldown. Please wait ${formattedCooldown} before trying again.`,
-        color: 'error',
-      });
+        color: 'error' });
       await message.channel.send({ embeds: [embed] }).catch(() => {});
       return;
     }

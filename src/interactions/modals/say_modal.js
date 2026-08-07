@@ -33,9 +33,8 @@ export default {
       });
     }
 
-    // Append any extra user IDs as mentions if not already in the message
-    const extraIds = parseUserIds(mentionsRaw);
-    for (const id of extraIds) {
+    // Extra user IDs → prepend mentions
+    for (const id of parseUserIds(mentionsRaw)) {
       const tag = `<@${id}>`;
       if (!content.includes(tag) && !content.includes(`<@!${id}>`)) {
         content = `${tag} ${content}`;
@@ -44,22 +43,16 @@ export default {
 
     const components = [];
     if (btnLabel && btnTarget) {
-      let url = btnTarget;
-
-      // Channel ID → Discord channel link
-      if (/^\d{17,20}$/.test(btnTarget)) {
-        url = `https://discord.com/channels/${interaction.guildId}/${btnTarget}`;
+      let url = btnTarget.trim();
+      if (/^\d{17,20}$/.test(url)) {
+        url = `https://discord.com/channels/${interaction.guildId}/${url}`;
       }
-
-      // Must be http(s) for Link buttons
       if (!/^https?:\/\//i.test(url)) {
         return interaction.reply({
-          content:
-            'Button target must be a full `https://` URL or a channel ID.',
+          content: 'Button needs a full https:// link **or** a channel ID (numbers only).',
           flags: MessageFlags.Ephemeral,
         });
       }
-
       components.push(
         new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -68,21 +61,23 @@ export default {
             .setURL(url),
         ),
       );
+    } else if (btnLabel || btnTarget) {
+      return interaction.reply({
+        content: 'For a button, fill **both** “Button text” and “Button link”.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
 
-    // Allow @user, @role, #channel pings from the bot message
     const payload = {
       content: content.slice(0, 2000),
-      allowedMentions: {
-        parse: ['users', 'roles', 'everyone'],
-      },
+      allowedMentions: { parse: ['users', 'roles', 'everyone'] },
     };
     if (components.length) payload.components = components;
 
     const sent = await channel.send(payload);
 
     return interaction.reply({
-      content: `Posted in ${channel}: ${sent.url}`,
+      content: `✅ Posted in ${channel}\n${sent.url}`,
       flags: MessageFlags.Ephemeral,
     });
   },

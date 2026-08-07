@@ -5,11 +5,12 @@ import {
   getUserAiHistory,
   saveUserAiHistory,
   clearUserAiHistory,
-  getUserAiPrefs,
   saveUserAiPrefs,
-  buildSystemInstructions,
-} from '../../services/aiService.js';
+  buildSystemInstructions } from '../../services/aiService.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
+
+const MENTION_RULE =
+  '\n\nMENTION RULE: To mention a Discord user you MUST write exactly <@USER_ID> (example: <@885316532673085482>). Never write @Name or bare @numbers without angle brackets.';
 
 function provider() {
   return (process.env.AI_PROVIDER || 'naga').toLowerCase();
@@ -27,6 +28,17 @@ function aiMissingMessage() {
   if (p === 'naga') return 'AI is not configured (missing NAGA_API_KEY).';
   if (p === 'openai') return 'AI is not configured (missing OPENAI_API_KEY).';
   return 'AI is not configured (missing GEMINI_API_KEY).';
+}
+
+/** Turn bare @123456... into <@123456...> so Discord can ping */
+function normalizeMentions(text) {
+  if (!text) return text;
+  // already proper <@id>
+  // convert @123456789012345678 (17-20 digits) not already inside < >
+  return String(text).replace(
+    /(^|[^<])@(\d{17,20})\b/g,
+    (_, pre, id) => `${pre}<@${id}>`,
+  );
 }
 
 export default {
@@ -50,10 +62,7 @@ export default {
   category: 'utility',
 
   async execute(interaction) {
-    // PUBLIC — whole channel can see
-    const deferOk = await InteractionHelper.safeDefer(interaction, {
-      ephemeral: false,
-    });
+    const deferOk = await InteractionHelper.safeDefer(interaction, {});
     if (!deferOk) return;
 
     const client = interaction.client;
@@ -69,33 +78,41 @@ export default {
     const config = await getAiConfig(client, guildId);
     if (!config.enabled) {
       return InteractionHelper.safeEditReply(interaction, {
-        content: 'AI is disabled on this server.',
-      });
+        content: 'AI is disabled on this server.' });
     }
     if (!aiReady()) {
       return InteractionHelper.safeEditReply(interaction, {
-        content: aiMissingMessage(),
-      });
+        content: aiMissingMessage() });
     }
 
     const lower = userMessage.toLowerCase().trim();
 
-    // Language prefs
-    if (/\b(bisaya|cebuano)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
+    if (
+      /\b(bisaya|cebuano)\b/i.test(userMessage) &&
+      /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)
+    ) {
       await saveUserAiPrefs(client, guildId, userId, { language: 'ceb' });
     }
-    if (/\b(tagalog|filipino)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
+    if (
+      /\b(tagalog|filipino)\b/i.test(userMessage) &&
+      /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)
+    ) {
       await saveUserAiPrefs(client, guildId, userId, { language: 'tl' });
     }
-    if (/\b(english)\b/i.test(userMessage) && /\b(yes|please|from now|bet|go)\b/i.test(lower)) {
+    if (
+      /\b(english)\b/i.test(userMessage) &&
+      /\b(yes|please|from now|bet|go)\b/i.test(lower)
+    ) {
       await saveUserAiPrefs(client, guildId, userId, { language: 'en' });
     }
 
-    // Personal customization
-    if (/\b(personal(ize)?|custom(ize)?|be my ai|from now on (you|always))\b/i.test(lower)) {
+    if (
+      /\b(personal(ize)?|custom(ize)?|be my ai|from now on (you|always))\b/i.test(
+        lower,
+      )
+    ) {
       await saveUserAiPrefs(client, guildId, userId, {
-        customStyle: userMessage.slice(0, 800),
-      });
+        customStyle: userMessage.slice(0, 800) });
     }
     if (/\b(reset (style|personality|ai)|default yuri|normal mode)\b/i.test(lower)) {
       await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
@@ -103,23 +120,24 @@ export default {
 
     try {
       const history = await getUserAiHistory(client, guildId, userId);
-      const systemInstructions = await buildSystemInstructions(
+      let systemInstructions = await buildSystemInstructions(
         client,
         guildId,
         userId,
         config.systemInstructions,
       );
+      systemInstructions += MENTION_RULE;
 
       let answer = await generateReply({
         systemInstructions,
         userMessage,
         model: config.model,
-        history,
-      });
+        history });
 
-      if (answer.length > config.maxReplyLength) {
-        answer = answer.slice(0, config.maxReplyLength - 3) + '...';
-      }
+      answer = normalizeMentions(answer);
+
+      const maxLen = config.maxReplyLength || 1800;
+      if (answer.length > maxLen) answer = answer.slice(0, maxLen - 3) + '...';
       if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
 
       await saveUserAiHistory(client, guildId, userId, [
@@ -133,11 +151,10 @@ export default {
           `**${interaction.user}** asked:\n> ${userMessage.slice(0, 300)}${
             userMessage.length > 300 ? '…' : ''
           }\n\n${answer}`,
-      });
+        allowedMentions: {
+          parse: ['users', 'roles'] } });
     } catch (error) {
       return InteractionHelper.safeEditReply(interaction, {
-        content: `AI error: ${error.message}`,
-      });
+        content: `AI error: ${error.message}` });
     }
-  },
-};
+  } };

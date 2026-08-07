@@ -3,8 +3,7 @@ import {
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
-  MessageFlags,
-} from 'discord.js';
+  MessageFlags } from 'discord.js';
 
 const pending = (globalThis.__yuriVerifyPending ??= new Map());
 
@@ -46,8 +45,7 @@ async function blockIfVerified(interaction) {
   if (alreadyVerified(interaction.member)) {
     const payload = {
       content: '❌ You are **already verified**. You cannot use this panel again.',
-      flags: MessageFlags.Ephemeral,
-    };
+      flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) {
       await interaction.followUp(payload).catch(() => {});
     } else {
@@ -157,13 +155,11 @@ export default [
           content:
             `**Step 1/3 — Choose your Age**\n` +
             `Pick again below.`,
-          components: [ageRow()],
-        });
+          components: [ageRow()] });
       } catch (err) {
         await safeError(interaction, err.message || 'Something went wrong.');
       }
-    },
-  },
+    } },
 
   // Back → gender
   {
@@ -181,13 +177,11 @@ export default [
           content:
             `✅ Age selected: **${state.age}**\n\n` +
             `**Step 2/3 — Choose your Gender**`,
-          components: [genderRow(), backButton('verify_back_age')],
-        });
+          components: [genderRow(), backButton('verify_back_age')] });
       } catch (err) {
         await safeError(interaction, err.message || 'Something went wrong.');
       }
-    },
-  },
+    } },
 
   // Back → rank
   {
@@ -203,13 +197,11 @@ export default [
 
         await interaction.update({
           content: `${summary(state)}\n\n**Step 3/3 — Choose your Valorant Rank**`,
-          components: [rankRow(), backButton('verify_back_gender')],
-        });
+          components: [rankRow(), backButton('verify_back_gender')] });
       } catch (err) {
         await safeError(interaction, err.message || 'Something went wrong.');
       }
-    },
-  },
+    } },
 
   // Confirm → give all roles
   {
@@ -250,19 +242,16 @@ export default [
           content:
             `🎉 **You are verified!**\n\n${summary(state)}\n\n` +
             `All roles applied. Welcome to BANORANT!`,
-          components: [],
-        });
+          components: [] });
 
         await interaction.followUp({
           content:
             '🎂 **Tip:** Use `/birthday set` with your birth year, month, and day.\n' +
             'We can greet you on your birthday and auto-update your age role (13-17 → 18-23 → 24+).',
-          ephemeral: true,
-        }).catch(() => {});
+          flags: MessageFlags.Ephemeral }).catch(() => {});
         
       } catch (err) {
         await safeError(interaction, err.message || 'Something went wrong.');
       }
-    },
-  },
+    } },
 ];

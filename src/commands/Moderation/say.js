@@ -8,14 +8,22 @@ import {
   ChannelType,
 } from 'discord.js';
 
+/**
+ * /say — bot posts a message as itself.
+ * Opens a form:
+ *  1) Message text (can include <@userId> and <#channelId>)
+ *  2) Optional extra pings (user IDs)
+ *  3) Optional button label
+ *  4) Optional button link (https://… or a channel ID)
+ */
 export default {
   data: new SlashCommandBuilder()
     .setName('say')
-    .setDescription('Send a custom bot message (mentions, optional button)')
+    .setDescription('Make the bot post a message (optional ping + button)')
     .addChannelOption((o) =>
       o
         .setName('channel')
-        .setDescription('Where to post (default: here)')
+        .setDescription('Channel to post in (default: this channel)')
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
@@ -28,39 +36,39 @@ export default {
 
     const modal = new ModalBuilder()
       .setCustomId(`say_modal:${channel.id}`)
-      .setTitle('Yuri says…');
+      .setTitle('Post as Yuri');
 
     const content = new TextInputBuilder()
       .setCustomId('content')
-      .setLabel('Message (use <@id> or <#id> to mention)')
+      .setLabel('1. Message text')
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(true)
       .setMaxLength(2000)
-      .setPlaceholder('Hello <@123> welcome to <#456> …');
+      .setPlaceholder('Write the message. Tip: <@USER_ID> pings someone.');
 
     const mentions = new TextInputBuilder()
       .setCustomId('mentions')
-      .setLabel('Extra user IDs to ping (comma-separated)')
+      .setLabel('2. Extra pings (user IDs, optional)')
       .setStyle(TextInputStyle.Short)
       .setRequired(false)
       .setMaxLength(200)
-      .setPlaceholder('885316532673085482, anotherId');
+      .setPlaceholder('Only numbers, comma-separated');
 
     const btnLabel = new TextInputBuilder()
       .setCustomId('btn_label')
-      .setLabel('Button label (optional)')
+      .setLabel('3. Button text (optional)')
       .setStyle(TextInputStyle.Short)
       .setRequired(false)
       .setMaxLength(80)
-      .setPlaceholder('Join VC / Rules / Website');
+      .setPlaceholder('e.g. Rules / Website / Join');
 
     const btnTarget = new TextInputBuilder()
       .setCustomId('btn_target')
-      .setLabel('Button: full URL or channel ID')
+      .setLabel('4. Button link or channel ID (optional)')
       .setStyle(TextInputStyle.Short)
       .setRequired(false)
       .setMaxLength(300)
-      .setPlaceholder('https://…  or  123456789012345678');
+      .setPlaceholder('https://...  OR  channel ID numbers');
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(content),
