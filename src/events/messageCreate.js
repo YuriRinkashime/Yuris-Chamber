@@ -159,9 +159,6 @@ export default {
 
       await handlePrefixCommand(message, client);
 
-      const countingHandled = await handleCountingGame(message, client);
-      if (countingHandled) return;
-
       await handleLeveling(message, client);
     } catch (error) {
       logger.error('Error in messageCreate:', error);
@@ -269,28 +266,6 @@ async function handlePrefixCommand(message, client) {
   } catch (error) {
     logger.error('Error handling prefix command:', error);
   }
-}
-
-    const content = message.content.trim();
-    const validCount = isValidCountingMessage(content, config);
-    const invalidAttempt = !validCount || message.author.id === config.lastUserId;
-
-    if (invalidAttempt) {
-      await message.delete().catch(() => {});
-      await saveCountingGameConfig(client, message.guild.id, {
-        ...config,
-        nextNumber: 1,
-        lastUserId: null,
-        currentStreak: 0,
-      });
-
-      const failureMessage = await message.channel.send(`❌ Count broken by <@${message.author.id}>. The sequence has been reset to **1**.`);
-      setTimeout(() => {
-        failureMessage.delete().catch(() => {});
-      }, 10000);
-
-      return true;
-    }
 }
 
 async function handleLeveling(message, client) {
