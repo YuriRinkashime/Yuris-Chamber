@@ -4,7 +4,6 @@ import { getGuildConfig } from '../services/config/guildConfig.js';
 import { getWelcomeConfig } from '../utils/database.js';
 import { formatWelcomeMessage } from '../utils/welcome.js';
 import { logEvent, EVENT_TYPES } from '../services/loggingService.js';
-import { getServerCounters, updateCounter } from '../services/serverstatsService.js';
 import { setBirthday as dbSetBirthday } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -155,10 +154,8 @@ export default {
       }
 
       try {
-        const counters = await getServerCounters(member.client, guild.id);
         for (const counter of counters) {
           if (counter && counter.type && counter.channelId && counter.enabled !== false) {
-            await updateCounter(member.client, guild, counter);
           }
         }
       } catch (error) {

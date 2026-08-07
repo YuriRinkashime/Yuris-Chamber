@@ -49,15 +49,6 @@ export {
     getLegacyVariantsForCanonical,
 } from './database/keys.js';
 
-export {
-    getTicketData,
-    getOpenTicketCountForUser,
-    saveTicketData,
-    deleteTicketData,
-    getTicketCounter,
-    incrementTicketCounter,
-    getGuildTicketStats,
-} from './database/tickets.js';
 
 import { db, getFromDb, setInDb } from './database/wrapper.js';
 import {

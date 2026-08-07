@@ -6,7 +6,6 @@ import cron from 'node-cron';
 import config from './config/application.js';
 import { initializeDatabase } from './utils/database.js';
 import { getGuildConfig } from './services/config/guildConfig.js';
-import { getServerCounters, saveServerCounters, updateCounter } from './services/serverstatsService.js';
 import { logger, startupLog, shutdownLog } from './utils/logger.js';
 import { checkBirthdays } from './services/birthdayService.js';
 import { checkGiveaways } from './services/giveawayService.js';
@@ -113,7 +112,6 @@ class YurisChamber extends Client {
     
     for (const [guildId, guild] of this.guilds.cache) {
       try {
-        const counters = await getServerCounters(this, guildId);
         const validCounters = [];
         const orphanedCounters = [];
         
@@ -122,7 +120,6 @@ class YurisChamber extends Client {
             const channel = guild.channels.cache.get(counter.channelId);
             if (channel) {
               validCounters.push(counter);
-              await updateCounter(this, guild, counter);
             } else {
               orphanedCounters.push(counter);
             }
@@ -130,7 +127,6 @@ class YurisChamber extends Client {
         }
         
         if (orphanedCounters.length > 0) {
-          await saveServerCounters(this, guildId, validCounters);
         }
       } catch (error) {
         logger.error(`Error updating counters for guild ${guildId}:`, error);

@@ -5,7 +5,6 @@ import {
     getTicketData,
     saveTicketData
 } from '../utils/database.js';
-import { getServerCounters, saveServerCounters } from '../services/serverstatsService.js';
 import { logger } from '../utils/logger.js';
 
 export default {
@@ -34,14 +33,12 @@ if (channel.type !== 2 && channel.type !== 4) {
 
         try {
             
-            const counters = await getServerCounters(client, guildId);
             const orphanedCounter = counters.find(c => c.channelId === channel.id);
             
             if (orphanedCounter) {
                 logger.info(`Counter channel ${channel.name} (${channel.id}) was deleted, removing counter ${orphanedCounter.id} from database`);
                 
                 const updatedCounters = counters.filter(c => c.channelId !== channel.id);
-                const success = await saveServerCounters(client, guildId, updatedCounters);
                 
                 if (success) {
                     logger.info(`Successfully removed orphaned counter ${orphanedCounter.id} (type: ${orphanedCounter.type}) from guild ${guildId}`);
