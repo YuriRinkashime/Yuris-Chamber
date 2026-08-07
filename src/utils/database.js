@@ -268,20 +268,6 @@ export async function getEndedGiveaways(client) {
             return [];
         }
 
-        if (isPostgresSqlReady(wrapper)) {
-            const { pgConfig } = await import('../config/database/postgres.js');
-
-            const result = await wrapper.db.pool.query(
-                `SELECT id, guild_id, message_id, data, ends_at 
-                 FROM ${pgConfig.tables.giveaways} 
-                 WHERE ends_at <= NOW() 
-                 AND COALESCE((data->>'ended')::boolean, false) = false
-                 ORDER BY ends_at ASC`,
-            );
-
-            return result.rows || [];
-        }
-
         if (wrapper.isDegraded?.()) {
             logger.debug('Postgres SQL unavailable for ended giveaways; scanning key-value store');
         }
