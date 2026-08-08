@@ -68,38 +68,69 @@ async function removeEnded(client, pollId) {
 }
 
 export async function listActivePolls(client, { verifyDiscord = false } = {}) {
+  if (!client?.db) return [];
   const ids = (await client.db.get(ACTIVE_KEY, [])) || [];
   const out = [];
+  // Parallel verify (fast) when requested
+  const loaded = [];
   for (const id of ids) {
-    let p = await getPoll(client, id);
-    if (!p || p.ended) continue;
-    if (verifyDiscord && client.channels) {
-      const gone = await purgePollIfMessageMissing(client, p);
-      if (gone) continue;
-      p = await getPoll(client, id);
-      if (!p || p.ended) continue;
+    const p = await getPoll(client, id);
+    if (!p) {
+      await removeActive(client, id);
+      continue;
     }
-    out.push(p);
+    if (p.ended) {
+      await removeActive(client, id);
+      await pushEnded(client, id);
+      continue;
+    }
+    loaded.push(p);
+  }
+  if (verifyDiscord && client.channels && loaded.length) {
+    const checks = await Promise.all(
+      loaded.map(async (p) => {
+        const exists = await discordPollMessageExists(client, p);
+        if (!exists) {
+          await deletePoll(client, p.id);
+          return null;
+        }
+        return p;
+      }),
+    );
+    for (const p of checks) if (p) out.push(p);
+  } else {
+    out.push(...loaded);
   }
   return out.sort((a, b) => (a.endsAt || 0) - (b.endsAt || 0));
 }
 
 export async function listEndedPolls(client, { verifyDiscord = false } = {}) {
+  if (!client?.db) return [];
   const ids = (await client.db.get(ENDED_KEY, [])) || [];
-  const out = [];
+  const loaded = [];
   for (const id of ids) {
-    let p = await getPoll(client, id);
+    const p = await getPoll(client, id);
     if (!p) {
       await removeEnded(client, id);
       continue;
     }
-    if (verifyDiscord && client.channels) {
-      const gone = await purgePollIfMessageMissing(client, p);
-      if (gone) continue;
-      p = await getPoll(client, id);
-      if (!p) continue;
-    }
-    out.push(p);
+    loaded.push(p);
+  }
+  const out = [];
+  if (verifyDiscord && client.channels && loaded.length) {
+    const checks = await Promise.all(
+      loaded.map(async (p) => {
+        const exists = await discordPollMessageExists(client, p);
+        if (!exists) {
+          await deletePoll(client, p.id);
+          return null;
+        }
+        return p;
+      }),
+    );
+    for (const p of checks) if (p) out.push(p);
+  } else {
+    out.push(...loaded);
   }
   return out.sort(
     (a, b) => (b.endedAt || b.endsAt || 0) - (a.endedAt || a.endsAt || 0),
@@ -380,120 +411,62 @@ export async function deletePoll(client, pollId) {
   return { ok: true };
 }
 
+async function withTimeout(promise, ms, fallback) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** true = message still exists, false = deleted / missing channel */
+export async function discordPollMessageExists(client, poll) {
+  if (!poll?.messageId || !poll?.channelId || !client?.channels) return true;
+  try {
+    const channel = await withTimeout(
+      client.channels.fetch(poll.channelId).catch((e) => {
+        if (e?.code === 10003) return null; // unknown channel
+        throw e;
+      }),
+      2000,
+      'timeout',
+    );
+    if (channel === 'timeout') return true; // don't purge on lag
+    if (!channel?.isTextBased?.()) return false;
+
+    const msg = await withTimeout(
+      channel.messages.fetch(poll.messageId).then(
+        (m) => m,
+        (e) => {
+          if (e?.code === 10008) return null;
+          throw e;
+        },
+      ),
+      2000,
+      'timeout',
+    );
+    if (msg === 'timeout') return true;
+    return !!msg;
+  } catch (e) {
+    if (e?.code === 10008 || e?.code === 10003) return false;
+    return true;
+  }
+}
+
 /** Remove poll data when Discord message is gone */
 export async function purgePollIfMessageMissing(client, poll) {
   if (!poll?.id) return false;
   if (!poll.messageId || !poll.channelId) return false;
-
-  try {
-    const channel = await client.channels.fetch(poll.channelId).catch(() => null);
-    if (!channel?.isTextBased?.()) {
-      await deletePoll(client, poll.id);
-      return true;
-    }
-    try {
-      await channel.messages.fetch(poll.messageId);
-      return false; // still exists
-    } catch (err) {
-      const code = err?.code || err?.rawError?.code;
-      // 10008 Unknown Message, 50001 Missing Access, 50013 Missing Permissions
-      if (code === 10008 || code === 1025 || String(err?.message || '').includes('Unknown Message')) {
-        await deletePoll(client, poll.id);
-        return true;
-      }
-      // Other errors: don't purge
-      return false;
-    }
-  } catch (_) {
-    return false;
-  }
-}
-
-
-/** Check if member can manage this poll */
-export function canManagePoll(interaction, poll) {
-  if (!interaction.memberPermissions) {
-    // DM / missing — allow bot owner via env
-    const owners = String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
-      .split(/[,\s]+/)
-      .filter(Boolean);
-    return owners.includes(interaction.user.id);
-  }
-  if (interaction.memberPermissions.has('ManageMessages')) return true;
-  if (poll?.createdBy && poll.createdBy === interaction.user.id) return true;
-  const owners = String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
-    .split(/[,\s]+/)
-    .filter(Boolean);
-  return owners.includes(interaction.user.id);
-}
-
-/** Apply edits from dashboard or Discord modal */
-export async function applyPollEdit(client, poll, {
-  question,
-  optionsText,
-  minutes,
-  seconds,
-  totalSeconds,
-} = {}) {
-  if (!poll || poll.ended) return { ok: false, error: 'Poll already ended' };
-
-  if (question && String(question).trim()) {
-    poll.question = String(question).trim().slice(0, 200);
-  }
-
-  if (optionsText != null && String(optionsText).trim()) {
-    const labels = String(optionsText)
-      .split(/\r?\n|\|/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .slice(0, 20);
-    if (labels.length < 2) {
-      return { ok: false, error: 'Need at least 2 options' };
-    }
-    // Keep votes for matching labels; drop votes for removed labels
-    const oldByLabel = Object.fromEntries(
-      (poll.options || []).map((o) => [o.label, o.votes || []]),
-    );
-    poll.options = labels.map((label, i) => ({
-      id: i,
-      label: label.slice(0, 80),
-      votes: oldByLabel[label] ? [...oldByLabel[label]] : [],
-    }));
-  }
-
-  // Duration: minutes + optional seconds (or totalSeconds)
-  let addMs = null;
-  if (totalSeconds != null && String(totalSeconds).trim() !== '') {
-    const sec = parseInt(totalSeconds, 10);
-    if (!Number.isFinite(sec) || sec < 10 || sec > 10080 * 60) {
-      return { ok: false, error: 'Duration must be 10 seconds – 7 days' };
-    }
-    addMs = sec * 1000;
-  } else {
-    const m = minutes != null && String(minutes).trim() !== '' ? parseInt(minutes, 10) : 0;
-    const s = seconds != null && String(seconds).trim() !== '' ? parseInt(seconds, 10) : 0;
-    if (m || s) {
-      if (!Number.isFinite(m) || m < 0 || m > 10080) {
-        return { ok: false, error: 'Minutes must be 0–10080' };
-      }
-      if (!Number.isFinite(s) || s < 0 || s > 59) {
-        return { ok: false, error: 'Seconds must be 0–59' };
-      }
-      const total = m * 60 + s;
-      if (total < 10) {
-        return { ok: false, error: 'Minimum duration is 10 seconds' };
-      }
-      addMs = total * 1000;
-    }
-  }
-  if (addMs != null) {
-    poll.endsAt = Date.now() + addMs;
-  }
-
-  await savePoll(client, poll);
-  await syncPollMessage(client, poll);
-  await upsertOwnerPollCard(client, poll, { note: 'Poll edited' }).catch(() => {});
-  return { ok: true, poll };
+  const exists = await discordPollMessageExists(client, poll);
+  if (exists) return false;
+  await deletePoll(client, poll.id);
+  return true;
 }
 
 export async function endPoll(client, poll) {

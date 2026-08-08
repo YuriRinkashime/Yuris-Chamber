@@ -787,10 +787,10 @@ app.get(path('/api/polls'), requireAuth, async (req, res) => {
       return res.json({ ok: true, tab: req.query.tab || 'active', polls: [] });
     }
     const tab = req.query.tab === 'ended' ? 'ended' : 'active';
-    // Fast path: no Discord verify here (cron handles deleted messages)
+    const verify = req.query.sync === '1' || req.query.verify === '1';
     const polls = tab === 'ended'
-      ? await listEndedPolls(discordClient, { verifyDiscord: false })
-      : await listActivePolls(discordClient, { verifyDiscord: false });
+      ? await listEndedPolls(discordClient, { verifyDiscord: verify })
+      : await listActivePolls(discordClient, { verifyDiscord: verify });
     const payload = (polls || []).map((poll) => {
       const stats = getPollStats(poll);
       return {
@@ -806,6 +806,7 @@ app.get(path('/api/polls'), requireAuth, async (req, res) => {
         options: stats.options,
       };
     });
+    res.setHeader('Cache-Control', 'no-store');
     res.json({ ok: true, tab, polls: payload });
   } catch (e) {
     console.error('api/polls', e);
@@ -908,17 +909,103 @@ app.post(path('/dashboard/dms/delete'), requireAuth, async (req, res) => {
 
 app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
   const tab = req.query.tab === 'ended' ? 'ended' : 'active';
+  // Always verify Discord on full page load so deleted messages disappear
+  let polls = [];
+  let err = '';
+  try {
+    if (discordClient?.db) {
+      polls =
+        tab === 'ended'
+          ? await listEndedPolls(discordClient, { verifyDiscord: true })
+          : await listActivePolls(discordClient, { verifyDiscord: true });
+    } else {
+      err = 'Database offline';
+    }
+  } catch (e) {
+    err = e.message || String(e);
+  }
+
+  function cardHtml(poll) {
+    const stats = getPollStats(poll);
+    const win =
+      stats.max === 0
+        ? '—'
+        : stats.winners.length === 1
+          ? escapeHtml(stats.winners[0])
+          : 'Tie: ' + stats.winners.map(escapeHtml).join(', ');
+    const opts = stats.options
+      .map((o) => {
+        const pct = stats.total ? Math.round((o.votes / stats.total) * 100) : 0;
+        return `<div class="poll-opt"><div style="flex:1"><span>${escapeHtml(o.label)}</span><div class="poll-bar"><i style="width:${pct}%"></i></div></div><strong>${o.votes}</strong></div>`;
+      })
+      .join('');
+    const leftSec = poll.endsAt
+      ? Math.max(0, Math.ceil((poll.endsAt - Date.now()) / 1000))
+      : 0;
+    const leftMin = Math.floor(leftSec / 60);
+    const leftS = leftSec % 60;
+    const optsText = (poll.options || []).map((o) => o.label).join('\n');
+    const actions = poll.ended
+      ? `<button type="button" class="btn danger" data-del="${escapeHtml(poll.id)}" style="padding:8px 12px;font-size:12px">Delete</button>`
+      : `<button type="button" class="btn secondary" data-edit-toggle="${escapeHtml(poll.id)}" style="padding:8px 12px;font-size:12px">Edit</button>
+         <button type="button" class="btn" data-end="${escapeHtml(poll.id)}" style="padding:8px 12px;font-size:12px">End</button>
+         <button type="button" class="btn danger" data-del="${escapeHtml(poll.id)}" style="padding:8px 12px;font-size:12px">Delete</button>`;
+    const editBox = poll.ended
+      ? ''
+      : `<div class="poll-edit" id="edit-${escapeHtml(poll.id)}" style="display:none;margin:12px 0;padding:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px">
+          <label class="muted" style="font-size:11px">Question</label>
+          <input type="text" data-eq="${escapeHtml(poll.id)}" value="${escapeHtml(poll.question)}" maxlength="200"/>
+          <label class="muted" style="font-size:11px;margin-top:8px;display:block">Options (one per line)</label>
+          <textarea data-eo="${escapeHtml(poll.id)}" rows="4">${escapeHtml(optsText)}</textarea>
+          <div class="row" style="margin-top:8px;gap:12px;align-items:flex-end">
+            <div><label class="muted" style="font-size:11px;display:block">Minutes</label>
+            <input type="number" data-em="${escapeHtml(poll.id)}" value="${leftMin}" min="0" max="10080" style="max-width:100px"/></div>
+            <div><label class="muted" style="font-size:11px;display:block">Seconds</label>
+            <input type="number" data-es="${escapeHtml(poll.id)}" value="${leftS}" min="0" max="59" style="max-width:100px"/></div>
+          </div>
+          <p class="muted" style="font-size:11px;margin:6px 0 0">Min 10 seconds total</p>
+          <div class="row" style="margin-top:10px;gap:8px">
+            <button type="button" class="btn" data-edit-save="${escapeHtml(poll.id)}">Save edit</button>
+            <button type="button" class="btn secondary" data-edit-cancel="${escapeHtml(poll.id)}">Cancel</button>
+          </div>
+        </div>`;
+    const timeBit = poll.ended
+      ? escapeHtml(poll.endedAt ? new Date(poll.endedAt).toLocaleString() : 'ended')
+      : `<span data-ends="${poll.endsAt || 0}">…</span>`;
+    return `<div class="card poll-card" data-poll="${escapeHtml(poll.id)}">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+        <h2 style="color:var(--text);text-transform:none;letter-spacing:0;font-size:16px;margin:0">${escapeHtml(poll.question)}</h2>
+        <div class="row" style="gap:6px">${actions}</div>
+      </div>
+      <p class="muted" style="margin:8px 0 10px">#${escapeHtml(poll.channelId)} · ${timeBit}</p>
+      ${editBox}
+      <div class="poll-opts">${opts}</div>
+      <div class="row" style="margin-top:12px">
+        <span class="badge on">Total ${stats.total}</span>
+        <span class="badge ${poll.ended ? 'on' : 'off'}">${poll.ended ? 'Winner: ' : 'Leading: '}${win}</span>
+      </div>
+    </div>`;
+  }
+
+  const listHtml = err
+    ? `<div class="card"><p class="err">${escapeHtml(err)}</p></div>`
+    : polls.length
+      ? polls.map(cardHtml).join('')
+      : `<div class="card"><p class="muted">No ${escapeHtml(tab)} polls.</p></div>`;
+
+  res.setHeader('Cache-Control', 'no-store');
   res.send(
     layout(
       'Polls',
       `<h1>Polls</h1>
-      <div class="banner"><div class="cap">Poll chamber<small>Live 2s · pauses while you edit</small></div></div>
-      <div class="row" style="margin-bottom:14px">
+      <div class="banner"><div class="cap">Poll chamber<small>Checks Discord on load · deleted messages drop here</small></div></div>
+      <div class="row" style="margin-bottom:14px;flex-wrap:wrap">
         <a class="btn ${tab === 'active' ? '' : 'secondary'}" href="${path('/dashboard/polls')}?tab=active">Active</a>
         <a class="btn ${tab === 'ended' ? '' : 'secondary'}" href="${path('/dashboard/polls')}?tab=ended">Ended</a>
-        <span class="muted" id="poll-hint" style="font-size:12px">Live · 2s</span>
+        <a class="btn secondary" href="${path('/dashboard/polls')}?tab=${tab}&sync=1">Sync now</a>
+        <span class="muted" style="font-size:12px">${polls.length} shown · page verifies Discord</span>
       </div>
-      <div id="poll-list"><p class="muted">Loading…</p></div>
+      <div id="poll-list">${listHtml}</div>
       <style>
         .poll-opts{display:flex;flex-direction:column;gap:6px}
         .poll-opt{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;background:rgba(0,0,0,.3);border:1px solid var(--line);font-size:13px}
@@ -930,22 +1017,12 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
       </style>
       <script>
       (function(){
-        var apiBase = ${JSON.stringify(path('/api/polls'))};
         var delUrl = ${JSON.stringify(path('/dashboard/polls/delete'))};
         var endUrl = ${JSON.stringify(path('/dashboard/polls/end'))};
         var editUrl = ${JSON.stringify(path('/dashboard/polls/edit'))};
         var tab = ${JSON.stringify(tab)};
-        var lastFp = '';
-        var editingId = null;
-        var scrollY = 0;
         var busy = false;
-        var draft = { q:'', o:'', m:'', s:'' };
 
-        function esc(s){
-          return String(s==null?'':s)
-            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
         function remain(ms){
           if(!ms) return '—';
           var left = ms - Date.now();
@@ -957,100 +1034,15 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
           if(m>0) return m+'m '+s+'s';
           return s+'s';
         }
-        function fp(polls){
-          return (polls||[]).map(function(p){
-            return [p.id, p.question, p.total, p.ended, p.endsAt,
-              (p.options||[]).map(function(o){ return o.label+':'+o.votes; }).join(',')
-            ].join('~');
-          }).join('|');
+        function tickTimers(){
+          document.querySelectorAll('[data-ends]').forEach(function(el){
+            el.textContent = remain(Number(el.getAttribute('data-ends')));
+          });
         }
+        tickTimers();
+        setInterval(tickTimers, 1000);
 
-        function render(polls){
-          var box = document.getElementById('poll-list');
-          if(!box) return;
-          var next = fp(polls);
-          if(next === lastFp){
-            if(!editingId){
-              document.querySelectorAll('[data-ends]').forEach(function(el){
-                el.textContent = remain(Number(el.getAttribute('data-ends')));
-              });
-            }
-            return;
-          }
-          // Don't blow away the form while editing
-          if(editingId){
-            document.querySelectorAll('[data-ends]').forEach(function(el){
-              el.textContent = remain(Number(el.getAttribute('data-ends')));
-            });
-            return;
-          }
-          scrollY = window.scrollY || 0;
-          lastFp = next;
-
-          if(!polls || !polls.length){
-            box.innerHTML = '<div class="card"><p class="muted">No '+esc(tab)+' polls.</p></div>';
-            return;
-          }
-
-          box.innerHTML = polls.map(function(poll){
-            var win = poll.max === 0 ? '—'
-              : (poll.winners && poll.winners.length === 1
-                  ? esc(poll.winners[0])
-                  : 'Tie: '+(poll.winners||[]).map(esc).join(', '));
-            var opts = (poll.options||[]).map(function(o){
-              var pct = poll.total ? Math.round((o.votes/poll.total)*100) : 0;
-              return '<div class="poll-opt"><div style="flex:1"><span>'+esc(o.label)+'</span>'+
-                '<div class="poll-bar"><i style="width:'+pct+'%"></i></div></div><strong>'+o.votes+'</strong></div>';
-            }).join('');
-            var leftSec = poll.endsAt ? Math.max(10, Math.ceil((poll.endsAt - Date.now())/1000)) : 300;
-            var leftMin = Math.floor(leftSec/60);
-            var leftS = leftSec % 60;
-            var optsText = (poll.options||[]).map(function(o){ return o.label; }).join('\\n');
-            var actions = poll.ended
-              ? '<button type="button" class="btn danger" data-del="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Delete</button>'
-              : '<button type="button" class="btn secondary" data-edit-toggle="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Edit</button>'+
-                '<button type="button" class="btn" data-end="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">End</button>'+
-                '<button type="button" class="btn danger" data-del="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Delete</button>';
-            var editBox = poll.ended ? '' : (
-              '<div class="poll-edit" id="edit-'+esc(poll.id)+'" style="display:none;margin:12px 0;padding:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px">'+
-                '<label class="muted" style="font-size:11px">Question</label>'+
-                '<input type="text" data-eq="'+esc(poll.id)+'" value="'+esc(poll.question)+'" maxlength="200"/>'+
-                '<label class="muted" style="font-size:11px;margin-top:8px;display:block">Options (one per line)</label>'+
-                '<textarea data-eo="'+esc(poll.id)+'" rows="4">'+esc(optsText)+'</textarea>'+
-                '<div class="row" style="margin-top:8px;gap:12px;align-items:flex-end">'+
-                  '<div><label class="muted" style="font-size:11px;display:block">Minutes</label>'+
-                  '<input type="number" data-em="'+esc(poll.id)+'" value="'+leftMin+'" min="0" max="10080" style="max-width:100px"/></div>'+
-                  '<div><label class="muted" style="font-size:11px;display:block">Seconds</label>'+
-                  '<input type="number" data-es="'+esc(poll.id)+'" value="'+leftS+'" min="0" max="59" style="max-width:100px"/></div>'+
-                '</div>'+
-                '<p class="muted" style="font-size:11px;margin:6px 0 0">Min total 10 seconds. Example: 0 min + 30 sec</p>'+
-                '<div class="row" style="margin-top:10px;gap:8px">'+
-                  '<button type="button" class="btn" data-edit-save="'+esc(poll.id)+'">Save edit</button>'+
-                  '<button type="button" class="btn secondary" data-edit-cancel="'+esc(poll.id)+'">Cancel</button>'+
-                '</div>'+
-              '</div>'
-            );
-            var timeBit = poll.ended
-              ? esc(poll.endedAt ? new Date(poll.endedAt).toLocaleString() : 'ended')
-              : '<span data-ends="'+(poll.endsAt||0)+'">'+remain(poll.endsAt)+'</span>';
-            return '<div class="card poll-card" data-poll="'+esc(poll.id)+'">'+
-              '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
-                '<h2 style="color:var(--text);text-transform:none;letter-spacing:0;font-size:16px;margin:0">'+esc(poll.question)+'</h2>'+
-                '<div class="row" style="gap:6px">'+actions+'</div></div>'+
-              '<p class="muted" style="margin:8px 0 10px">#'+esc(poll.channelId)+' · '+timeBit+'</p>'+
-              editBox +
-              '<div class="poll-opts">'+opts+'</div>'+
-              '<div class="row" style="margin-top:12px">'+
-                '<span class="badge on">Total '+poll.total+'</span>'+
-                '<span class="badge '+(poll.ended?'on':'off')+'">'+(poll.ended?'Winner: ':'Leading: ')+win+'</span>'+
-              '</div></div>';
-          }).join('');
-
-          bind();
-          requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });
-        }
-
-        function post(url, fields, done){
+        function post(url, fields, after){
           if(busy) return;
           busy = true;
           var body = new URLSearchParams();
@@ -1062,117 +1054,63 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
           }).then(function(r){ return r.json().catch(function(){ return { ok:r.ok }; }); })
             .then(function(d){
               busy = false;
-              lastFp = '';
-              if(done) done(d);
-              else tick(true);
+              if(after) after(d);
+              else location.href = ${JSON.stringify(path('/dashboard/polls'))} + '?tab=' + encodeURIComponent(tab) + '&_=' + Date.now();
             })
-            .catch(function(){ busy = false; lastFp = ''; tick(true); });
+            .catch(function(){ busy = false; location.reload(); });
         }
 
-        function closeEdit(){
-          if(editingId){
-            var el = document.getElementById('edit-'+editingId);
-            if(el) el.style.display = 'none';
-          }
-          editingId = null;
-          var hint = document.getElementById('poll-hint');
-          if(hint) hint.textContent = 'Live · 2s';
-        }
-
-        function bind(){
-          document.querySelectorAll('button[data-del]').forEach(function(btn){
-            btn.onclick = function(){
-              if(!confirm('Delete this poll in Discord + dashboard?')) return;
-              closeEdit();
-              post(delUrl, { pollId: btn.getAttribute('data-del'), tab: tab });
-            };
-          });
-          document.querySelectorAll('button[data-end]').forEach(function(btn){
-            btn.onclick = function(){
-              if(!confirm('End this poll and reveal results?')) return;
-              closeEdit();
-              post(endUrl, { pollId: btn.getAttribute('data-end') }, function(){
-                location.href = ${JSON.stringify(path('/dashboard/polls'))} + '?tab=ended';
-              });
-            };
-          });
-          document.querySelectorAll('button[data-edit-toggle]').forEach(function(btn){
-            btn.onclick = function(){
-              var id = btn.getAttribute('data-edit-toggle');
-              var el = document.getElementById('edit-'+id);
-              if(!el) return;
-              if(editingId === id){
-                closeEdit();
-                lastFp = '';
-                tick(true);
-                return;
-              }
-              if(editingId){
-                var prev = document.getElementById('edit-'+editingId);
-                if(prev) prev.style.display = 'none';
-              }
-              editingId = id;
-              el.style.display = 'block';
-              var hint = document.getElementById('poll-hint');
-              if(hint) hint.textContent = 'Editing · live paused';
-            };
-          });
-          document.querySelectorAll('button[data-edit-cancel]').forEach(function(btn){
-            btn.onclick = function(){
-              closeEdit();
-              lastFp = '';
-              tick(true);
-            };
-          });
-          document.querySelectorAll('button[data-edit-save]').forEach(function(btn){
-            btn.onclick = function(){
-              var id = btn.getAttribute('data-edit-save');
-              var q = document.querySelector('input[data-eq="'+id+'"]');
-              var o = document.querySelector('textarea[data-eo="'+id+'"]');
-              var m = document.querySelector('input[data-em="'+id+'"]');
-              var s = document.querySelector('input[data-es="'+id+'"]');
-              post(editUrl, {
-                pollId: id,
-                question: q ? q.value : '',
-                options: o ? o.value : '',
-                minutes: m ? m.value : '0',
-                seconds: s ? s.value : '0'
-              }, function(d){
-                if(d && d.ok === false){ alert(d.error || 'Edit failed'); return; }
-                closeEdit();
-                lastFp = '';
-                tick(true);
-              });
-            };
-          });
-        }
-
-        function tick(force){
-          if(editingId && !force) return; // pause while editing
-          if(force) lastFp = '';
-          fetch(apiBase + '?tab=' + encodeURIComponent(tab) + '&_=' + Date.now(), { credentials:'same-origin', cache:'no-store' })
-            .then(function(r){ return r.json(); })
-            .then(function(d){
-              if(!d) return;
-              var hint = document.getElementById('poll-hint');
-              if(hint && !editingId) hint.textContent = 'Live · 2s · ' + new Date().toLocaleTimeString();
-              render(d.polls || []);
-            })
-            .catch(function(){
-              var box = document.getElementById('poll-list');
-              if(box && box.textContent.indexOf('Loading') >= 0)
-                box.innerHTML = '<div class="card"><p class="err">Could not load polls.</p></div>';
+        document.querySelectorAll('button[data-del]').forEach(function(btn){
+          btn.onclick = function(){
+            if(!confirm('Delete this poll in Discord + dashboard?')) return;
+            post(delUrl, { pollId: btn.getAttribute('data-del'), tab: tab });
+          };
+        });
+        document.querySelectorAll('button[data-end]').forEach(function(btn){
+          btn.onclick = function(){
+            if(!confirm('End poll and reveal results?')) return;
+            post(endUrl, { pollId: btn.getAttribute('data-end') }, function(){
+              location.href = ${JSON.stringify(path('/dashboard/polls'))} + '?tab=ended&_=' + Date.now();
             });
-        }
+          };
+        });
+        document.querySelectorAll('button[data-edit-toggle]').forEach(function(btn){
+          btn.onclick = function(){
+            var id = btn.getAttribute('data-edit-toggle');
+            var el = document.getElementById('edit-'+id);
+            if(!el) return;
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+          };
+        });
+        document.querySelectorAll('button[data-edit-cancel]').forEach(function(btn){
+          btn.onclick = function(){
+            var el = document.getElementById('edit-'+btn.getAttribute('data-edit-cancel'));
+            if(el) el.style.display = 'none';
+          };
+        });
+        document.querySelectorAll('button[data-edit-save]').forEach(function(btn){
+          btn.onclick = function(){
+            var id = btn.getAttribute('data-edit-save');
+            var q = document.querySelector('input[data-eq="'+id+'"]');
+            var o = document.querySelector('textarea[data-eo="'+id+'"]');
+            var m = document.querySelector('input[data-em="'+id+'"]');
+            var s = document.querySelector('input[data-es="'+id+'"]');
+            post(editUrl, {
+              pollId: id,
+              question: q ? q.value : '',
+              options: o ? o.value : '',
+              minutes: m ? m.value : '0',
+              seconds: s ? s.value : '0'
+            });
+          };
+        });
 
-        tick(true);
-        setInterval(function(){ tick(false); }, 2000);
-        setInterval(function(){
-          if(editingId) return;
-          document.querySelectorAll('[data-ends]').forEach(function(el){
-            el.textContent = remain(Number(el.getAttribute('data-ends')));
-          });
-        }, 1000);
+        // Soft auto-refresh whole page every 15s to pick up Discord deletes + new votes
+        // (no Loading flash — full navigation)
+        setTimeout(function(){
+          if(document.querySelector('.poll-edit[style*="display: block"]')) return;
+          location.replace(${JSON.stringify(path('/dashboard/polls'))} + '?tab=' + encodeURIComponent(tab) + '&_=' + Date.now());
+        }, 15000);
       })();
       </script>`,
       'polls',
