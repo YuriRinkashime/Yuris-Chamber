@@ -38,6 +38,56 @@ export async function listInbox(client) {
   return out;
 }
 
+export async function deleteThread(client, userId) {
+  const id = String(userId);
+  cancelAutoAi(id);
+  const thread = await getThread(client, id);
+
+  // Delete owner notify card in Discord if present
+  if (thread?.ownerNotifyMessageId && client?.users) {
+    try {
+      const owners = String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
+        .split(/[,\s]+/)
+        .filter(Boolean);
+      for (const oid of owners) {
+        const user = await client.users.fetch(oid).catch(() => null);
+        if (!user) continue;
+        const dm = await user.createDM().catch(() => null);
+        if (!dm) continue;
+        if (thread.ownerNotifyMessageId) {
+          const m = await dm.messages.fetch(thread.ownerNotifyMessageId).catch(() => null);
+          if (m) await m.delete().catch(() => {});
+        }
+      }
+    } catch (_) {}
+  }
+
+  await client.db.delete(THREAD_KEY(id)).catch(() => client.db.set(THREAD_KEY(id), null));
+  const inbox = (await client.db.get(INBOX_KEY, [])) || [];
+  await client.db.set(
+    INBOX_KEY,
+    inbox.filter((x) => x !== id),
+  );
+  return { ok: true };
+}
+
+/** Drop inbox entries whose owner-notify message was deleted (optional soft sync) */
+export async function syncInboxDeleted(client) {
+  if (!client?.db) return;
+  const ids = (await client.db.get(INBOX_KEY, [])) || [];
+  for (const userId of [...ids]) {
+    const t = await getThread(client, userId);
+    if (!t?.messages?.length) {
+      const inbox = (await client.db.get(INBOX_KEY, [])) || [];
+      await client.db.set(
+        INBOX_KEY,
+        inbox.filter((x) => x !== userId),
+      );
+    }
+  }
+}
+
+
 export async function appendUserDm(client, user, content) {
   const thread = await getThread(client, user.id);
   thread.userTag = user.tag;

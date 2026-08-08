@@ -4,7 +4,7 @@ import {
   savePoll,
   buildPollEmbed,
   buildPollButtons,
-  notifyOwnersPoll,
+  upsertOwnerPollCard,
 } from '../../services/pollService.js';
 
 export default {
@@ -66,9 +66,10 @@ export default {
       options,
       endsAt,
       ended: false,
-      showCounts: false,
+      showCounts: true,
       createdBy: interaction.user.id,
       createdAt: Date.now(),
+      ownerNotify: {},
     };
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -80,13 +81,9 @@ export default {
       });
       poll.messageId = msg.id;
       await savePoll(interaction.client, poll);
-
-      notifyOwnersPoll(
-        interaction.client,
-        `📊 **New poll**\n**${question}**\n` +
-          `${options.length} options · ends <t:${Math.floor(endsAt / 1000)}:R>\n` +
-          `${channel}`,
-      ).catch(() => {});
+      await upsertOwnerPollCard(interaction.client, poll, {
+        note: 'New poll created',
+      }).catch(() => {});
 
       return interaction.editReply({
         content:

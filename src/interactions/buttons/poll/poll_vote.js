@@ -5,8 +5,8 @@ import {
   buildPollEmbed,
   buildPollButtons,
   endPoll,
-  getPollStats,
-  notifyOwnersPoll,
+  upsertOwnerPollCard,
+  purgePollIfMessageMissing,
 } from '../../../services/pollService.js';
 
 export default {
@@ -22,10 +22,24 @@ export default {
       });
     }
 
-    const poll = await getPoll(client, pollId);
+    let poll = await getPoll(client, pollId);
     if (!poll) {
       return interaction.reply({
         content: 'This poll no longer exists.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (await purgePollIfMessageMissing(client, poll)) {
+      return interaction.reply({
+        content: 'This poll was deleted.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    poll = await getPoll(client, pollId);
+    if (!poll) {
+      return interaction.reply({
+        content: 'This poll was deleted.',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -52,17 +66,12 @@ export default {
     }
     opt.votes = opt.votes || [];
     opt.votes.push(userId);
+    poll.showCounts = true;
     await savePoll(client, poll);
 
-    const { total } = getPollStats(poll);
-    // Fire-and-forget owner DM (don't block the vote)
-    notifyOwnersPoll(
-      client,
-      `🗳️ **Poll vote**\n**${poll.question}**\n` +
-        `${interaction.user.tag} → **${opt.label}**\n` +
-        `Total votes now: **${total}**\n` +
-        `<#${poll.channelId}>`,
-    ).catch(() => {});
+    upsertOwnerPollCard(client, poll, {
+      note: `Last vote: ${interaction.user.tag} → ${opt.label}`,
+    }).catch(() => {});
 
     try {
       await interaction.update({

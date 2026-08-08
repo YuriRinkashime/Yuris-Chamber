@@ -5,6 +5,7 @@ import {
   listActivePolls,
   listEndedPolls,
   getPollStats,
+  deletePoll,
 } from './services/pollService.js';
 import {
   formatUptime,
@@ -776,70 +777,218 @@ app.post(path('/dashboard/commands/toggle'), requireAuth, async (req, res) => {
 });
 
 
-app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
-  const tab = req.query.tab === 'ended' ? 'ended' : 'active';
-  let polls = [];
+
+app.get(path('/api/polls'), requireAuth, async (req, res) => {
   try {
-    polls = tab === 'ended'
+    const tab = req.query.tab === 'ended' ? 'ended' : 'active';
+    const polls = tab === 'ended'
       ? await listEndedPolls(discordClient)
       : await listActivePolls(discordClient);
+    const payload = (polls || []).map((poll) => {
+      const stats = getPollStats(poll);
+      return {
+        id: poll.id,
+        question: poll.question,
+        channelId: poll.channelId,
+        endsAt: poll.endsAt || null,
+        endedAt: poll.endedAt || null,
+        ended: !!poll.ended,
+        total: stats.total,
+        max: stats.max,
+        winners: stats.winners,
+        options: stats.options,
+      };
+    });
+    res.json({ ok: true, tab, polls: payload });
   } catch (e) {
-    polls = [];
+    res.status(500).json({ ok: false, error: e.message });
   }
+});
 
-  const tabs = `
-    <div class="row" style="margin-bottom:14px">
-      <a class="btn ${tab === 'active' ? '' : 'secondary'}" href="${path('/dashboard/polls')}?tab=active">Active</a>
-      <a class="btn ${tab === 'ended' ? '' : 'secondary'}" href="${path('/dashboard/polls')}?tab=ended">Ended</a>
-    </div>`;
 
-  const cards = polls.length
-    ? polls.map((poll) => {
-        const stats = getPollStats(poll);
-        const win =
-          stats.max === 0
-            ? '—'
-            : stats.winners.length === 1
-              ? escapeHtml(stats.winners[0])
-              : 'Tie: ' + stats.winners.map(escapeHtml).join(', ');
-        const ends = poll.endsAt
-          ? new Date(poll.endsAt).toLocaleString()
-          : '—';
-        const opts = stats.options
-          .map(
-            (o) =>
-              `<div class="poll-opt"><span>${escapeHtml(o.label)}</span><strong>${o.votes}</strong></div>`,
-          )
-          .join('');
-        return `<div class="card poll-card">
-          <h2 style="color:var(--text);text-transform:none;letter-spacing:0;font-size:16px;margin-bottom:8px">${escapeHtml(poll.question)}</h2>
-          <p class="muted" style="margin:0 0 10px">#${escapeHtml(poll.channelId)} · ends/ended ${escapeHtml(ends)}</p>
-          <div class="poll-opts">${opts}</div>
-          <div class="row" style="margin-top:12px">
-            <span class="badge on">Total ${stats.total}</span>
-            <span class="badge ${tab === 'ended' ? 'on' : 'off'}">${tab === 'ended' ? 'Winner: ' + win : 'Leading: ' + win}</span>
-          </div>
-        </div>`;
-      }).join('')
-    : `<div class="card"><p class="muted">No ${tab} polls.</p></div>`;
+app.post(path('/dashboard/polls/delete'), requireAuth, async (req, res) => {
+  const wantsJson = (req.headers.accept || '').includes('application/json');
+  const pollId = String(req.body.pollId || '').trim();
+  if (!pollId) {
+    if (wantsJson) return res.status(400).json({ ok: false, error: 'Missing pollId' });
+    return res.redirect(path('/dashboard/polls') + '?err=missing');
+  }
+  try {
+    await deletePoll(discordClient, pollId);
+    if (wantsJson) return res.json({ ok: true });
+    const tab = req.body.tab === 'ended' ? 'ended' : 'active';
+    return res.redirect(path('/dashboard/polls') + '?tab=' + tab + '&ok=1');
+  } catch (e) {
+    if (wantsJson) return res.status(500).json({ ok: false, error: e.message });
+    return res.redirect(path('/dashboard/polls') + '?err=1');
+  }
+});
 
+app.post(path('/dashboard/dms/delete'), requireAuth, async (req, res) => {
+  const wantsJson = (req.headers.accept || '').includes('application/json');
+  const userId = String(req.body.userId || '').trim();
+  if (!userId) {
+    if (wantsJson) return res.status(400).json({ ok: false, error: 'Missing userId' });
+    return res.redirect(path('/dashboard/dms'));
+  }
+  try {
+    const { deleteThread } = await import('./services/dmInboxService.js');
+    await deleteThread(discordClient, userId);
+    if (wantsJson) return res.json({ ok: true });
+    return res.redirect(path('/dashboard/dms'));
+  } catch (e) {
+    if (wantsJson) return res.status(500).json({ ok: false, error: e.message });
+    return res.redirect(path('/dashboard/dms'));
+  }
+});
+
+app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
+  const tab = req.query.tab === 'ended' ? 'ended' : 'active';
+  const flash = req.query.ok
+    ? '<p class="ok">Poll deleted.</p>'
+    : req.query.err
+      ? '<p class="err">Could not delete poll.</p>'
+      : '';
   res.send(
     layout(
       'Polls',
-      `<h1>Polls</h1>
-      <div class="banner"><div class="cap">${tab === 'active' ? 'Live ballots' : 'Closed polls'}<small>Totals · winners · Firebase</small></div></div>
-      ${tabs}
-      ${cards}
+      `<h1>Polls</h1>${flash}
+      <div class="banner"><div class="cap">Poll chamber<small>Live sync · delete removes Discord + Firebase</small></div></div>
+      <div class="row" style="margin-bottom:14px">
+        <button type="button" class="btn" id="tab-active" data-tab="active">Active</button>
+        <button type="button" class="btn secondary" id="tab-ended" data-tab="ended">Ended</button>
+        <span class="muted" id="poll-live-hint" style="font-size:12px">Live every 3s</span>
+      </div>
+      <div id="poll-list"><p class="muted">Loading…</p></div>
       <style>
         .poll-opts{display:flex;flex-direction:column;gap:6px}
         .poll-opt{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;background:rgba(0,0,0,.3);border:1px solid var(--line);font-size:13px}
         .poll-opt strong{color:var(--val2)}
         .poll-card{clip-path:none!important;border-radius:10px}
-      </style>`,
+        .poll-bar{height:6px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:4px;overflow:hidden}
+        .poll-bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--val),var(--val2));border-radius:3px}
+      </style>
+      <script>
+      const apiBase = ${JSON.stringify(path('/api/polls'))};
+      const delUrl = ${JSON.stringify(path('/dashboard/polls/delete'))};
+      let tab = ${JSON.stringify(tab)};
+      let lastFp = '';
+      let scrollY = 0;
+      let pollsCache = [];
+
+      function esc(s){
+        return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+      function setTabButtons(){
+        var a = document.getElementById('tab-active');
+        var e = document.getElementById('tab-ended');
+        if(!a||!e) return;
+        a.className = 'btn' + (tab==='active' ? '' : ' secondary');
+        e.className = 'btn' + (tab==='ended' ? '' : ' secondary');
+      }
+      document.getElementById('tab-active').onclick = function(){ tab='active'; lastFp=''; setTabButtons(); tick(true); };
+      document.getElementById('tab-ended').onclick = function(){ tab='ended'; lastFp=''; setTabButtons(); tick(true); };
+      setTabButtons();
+
+      function remain(ms){
+        if(!ms) return '—';
+        var left = ms - Date.now();
+        if(left <= 0) return 'ending…';
+        var s = Math.floor(left/1000);
+        var m = Math.floor(s/60); s = s%60;
+        var h = Math.floor(m/60); m = m%60;
+        if(h>0) return h+'h '+m+'m';
+        if(m>0) return m+'m '+s+'s';
+        return s+'s';
+      }
+
+      function fingerprint(polls){
+        return (polls||[]).map(function(p){
+          return p.id+':'+p.total+':'+p.ended+':'+(p.options||[]).map(function(o){return o.votes;}).join(',');
+        }).join('|');
+      }
+
+      function render(polls){
+        const fp = fingerprint(polls);
+        pollsCache = polls || [];
+        if(fp === lastFp){
+          // only refresh countdowns in-place
+          document.querySelectorAll('[data-ends]').forEach(function(el){
+            el.textContent = remain(Number(el.getAttribute('data-ends')));
+          });
+          return;
+        }
+        lastFp = fp;
+        scrollY = window.scrollY || 0;
+        const box = document.getElementById('poll-list');
+        if(!polls.length){
+          box.innerHTML = '<div class="card"><p class="muted">No '+esc(tab)+' polls.</p></div>';
+          requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });
+          return;
+        }
+        box.innerHTML = polls.map(function(poll){
+          const win = poll.max === 0 ? '—'
+            : (poll.winners.length === 1 ? esc(poll.winners[0]) : 'Tie: '+poll.winners.map(esc).join(', '));
+          const opts = (poll.options||[]).map(function(o){
+            const pct = poll.total ? Math.round((o.votes/poll.total)*100) : 0;
+            return '<div class="poll-opt"><div style="flex:1"><span>'+esc(o.label)+'</span>'+
+              '<div class="poll-bar"><i style="width:'+pct+'%"></i></div></div><strong>'+o.votes+'</strong></div>';
+          }).join('');
+          const timeBit = poll.ended
+            ? esc(poll.endedAt ? new Date(poll.endedAt).toLocaleString() : 'ended')
+            : '<span data-ends="'+(poll.endsAt||0)+'">'+remain(poll.endsAt)+'</span>';
+          return '<div class="card poll-card" data-poll="'+esc(poll.id)+'">'+
+            '<div class="row" style="justify-content:space-between;align-items:flex-start">'+
+              '<h2 style="color:var(--text);text-transform:none;letter-spacing:0;font-size:16px;margin:0">'+esc(poll.question)+'</h2>'+
+              '<button type="button" class="btn danger" data-del="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Delete</button>'+
+            '</div>'+
+            '<p class="muted" style="margin:8px 0 10px">#'+esc(poll.channelId)+' · '+timeBit+'</p>'+
+            '<div class="poll-opts">'+opts+'</div>'+
+            '<div class="row" style="margin-top:12px">'+
+              '<span class="badge on">Total '+poll.total+'</span>'+
+              '<span class="badge '+(poll.ended?'on':'off')+'">'+(poll.ended?'Winner: ':'Leading: ')+win+'</span>'+
+            '</div></div>';
+        }).join('');
+        document.querySelectorAll('button[data-del]').forEach(function(btn){
+          btn.onclick = function(){
+            if(!confirm('Delete this poll in Discord + dashboard?')) return;
+            var body = new URLSearchParams();
+            body.set('pollId', btn.getAttribute('data-del'));
+            body.set('tab', tab);
+            fetch(delUrl, {
+              method:'POST', credentials:'same-origin',
+              headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
+              body: body.toString()
+            }).then(function(r){ return r.json().catch(function(){ return { ok:r.ok }; }); })
+              .then(function(d){ lastFp=''; tick(true); })
+              .catch(function(){});
+          };
+        });
+        requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });
+      }
+
+      async function tick(force){
+        try{
+          const r = await fetch(apiBase + '?tab=' + encodeURIComponent(tab), { credentials:'same-origin' });
+          if(!r.ok) return;
+          const d = await r.json();
+          if(force) lastFp = '';
+          render(d.polls||[]);
+        }catch(e){}
+      }
+      tick(true);
+      setInterval(function(){ tick(false); }, 3000);
+      setInterval(function(){
+        document.querySelectorAll('[data-ends]').forEach(function(el){
+          el.textContent = remain(Number(el.getAttribute('data-ends')));
+        });
+      }, 1000);
+      </script>`,
       'polls',
     ),
   );
 });
+
 
 app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
   res.send(
@@ -896,6 +1045,7 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
       <script>
       const api = ${JSON.stringify(path('/api/dms'))};
       const replyUrl = ${JSON.stringify(path('/dashboard/dms/reply'))};
+      const dmDelUrl = ${JSON.stringify(path('/dashboard/dms/delete'))};
 
       const scrollMap = {};
       const draftMap = {};
@@ -1011,7 +1161,8 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
             timer = '<span class="badge on">'+esc(t.status||'open')+'</span>';
           }
           return '<div class="card dm-card" data-card="'+esc(t.userId)+'">'+
-            '<div class="dm-head"><h2>'+esc(t.userTag)+'</h2>'+timer+'</div>'+
+            '<div class="dm-head"><h2>'+esc(t.userTag)+'</h2><div class="row">'+timer+
+            '<button type="button" class="btn danger" data-dm-del="'+esc(t.userId)+'" style="padding:6px 10px;font-size:11px">Delete</button></div></div>'+
             '<div class="dm-thread" data-uid="'+esc(t.userId)+'">'+hist+'</div>'+
             '<div class="dm-actions">'+
               '<textarea data-uid="'+esc(t.userId)+'" placeholder="Type your reply…"></textarea>'+
@@ -1077,6 +1228,18 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         document.querySelectorAll('button[data-send]').forEach(function(btn){
           btn.onclick = function(){
             sendReply(btn.getAttribute('data-uid'), btn.getAttribute('data-send'));
+          };
+        });
+        document.querySelectorAll('button[data-dm-del]').forEach(function(btn){
+          btn.onclick = function(){
+            if(!confirm('Remove this DM thread from dashboard?')) return;
+            var body = new URLSearchParams();
+            body.set('userId', btn.getAttribute('data-dm-del'));
+            fetch(dmDelUrl, {
+              method:'POST', credentials:'same-origin',
+              headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
+              body: body.toString()
+            }).then(function(){ lastFingerprint=''; tick(true); }).catch(function(){});
           };
         });
       }
