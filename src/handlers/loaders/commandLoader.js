@@ -59,6 +59,8 @@ export async function loadCommands(client) {
         'Moderation',
         'Reaction_roles',
         'Roles',
+        'Utility',
+        'Fun',
         'valorant',
         'Welcome',
     ];
