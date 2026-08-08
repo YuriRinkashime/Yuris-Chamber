@@ -66,7 +66,7 @@ export default {
       options,
       endsAt,
       ended: false,
-      showCounts: true,
+      showCounts: false,
       createdBy: interaction.user.id,
       createdAt: Date.now(),
       ownerNotify: {},

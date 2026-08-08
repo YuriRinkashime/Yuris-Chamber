@@ -66,7 +66,7 @@ export default {
     }
     opt.votes = opt.votes || [];
     opt.votes.push(userId);
-    poll.showCounts = true;
+    
     await savePoll(client, poll);
 
     upsertOwnerPollCard(client, poll, {

@@ -67,22 +67,39 @@ async function removeEnded(client, pollId) {
   );
 }
 
-export async function listActivePolls(client) {
+export async function listActivePolls(client, { verifyDiscord = true } = {}) {
   const ids = (await client.db.get(ACTIVE_KEY, [])) || [];
   const out = [];
   for (const id of ids) {
-    const p = await getPoll(client, id);
-    if (p && !p.ended) out.push(p);
+    let p = await getPoll(client, id);
+    if (!p || p.ended) continue;
+    if (verifyDiscord && client.channels) {
+      const gone = await purgePollIfMessageMissing(client, p);
+      if (gone) continue;
+      p = await getPoll(client, id);
+      if (!p || p.ended) continue;
+    }
+    out.push(p);
   }
   return out.sort((a, b) => (a.endsAt || 0) - (b.endsAt || 0));
 }
 
-export async function listEndedPolls(client) {
+export async function listEndedPolls(client, { verifyDiscord = true } = {}) {
   const ids = (await client.db.get(ENDED_KEY, [])) || [];
   const out = [];
   for (const id of ids) {
-    const p = await getPoll(client, id);
-    if (p) out.push(p);
+    let p = await getPoll(client, id);
+    if (!p) {
+      await removeEnded(client, id);
+      continue;
+    }
+    if (verifyDiscord && client.channels) {
+      const gone = await purgePollIfMessageMissing(client, p);
+      if (gone) continue;
+      p = await getPoll(client, id);
+      if (!p) continue;
+    }
+    out.push(p);
   }
   return out.sort(
     (a, b) => (b.endedAt || b.endsAt || 0) - (a.endedAt || a.endsAt || 0),
@@ -171,27 +188,29 @@ export async function upsertOwnerPollCard(client, poll, { note = null } = {}) {
   await client.db.set(pollKey(poll.id), poll);
 }
 
-/** Public poll embed — bars + live counts + relative end time */
+/** Public poll embed — hide live counts until closed */
 export function buildPollEmbed(poll, { final = false } = {}) {
   const { options, total, winners, max } = getPollStats(poll);
-  const showCounts = final || poll.showCounts !== false;
+  const reveal = final || poll.ended === true;
 
-  const lines = options.map((o, i) => {
-    const pct = total ? Math.round((o.votes / total) * 100) : 0;
-    if (showCounts) {
+  let lines;
+  if (reveal) {
+    lines = options.map((o, i) => {
+      const pct = total ? Math.round((o.votes / total) * 100) : 0;
       const medal =
-        final && max > 0 && o.votes === max
-          ? o.votes === max && winners.length === 1
+        max > 0 && o.votes === max
+          ? winners.length === 1
             ? '🏆 '
             : '🤝 '
           : `**${i + 1}.** `;
       return `${medal}**${o.label}**\n\`${bar(pct)}\` **${o.votes}** · ${pct}%`;
-    }
-    return `**${i + 1}.** ${o.label}`;
-  });
+    });
+  } else {
+    lines = options.map((o, i) => `**${i + 1}.** ${o.label}`);
+  }
 
   let winnerLine = '';
-  if (final) {
+  if (reveal) {
     if (max === 0) winnerLine = '\n\n**Result:** No votes cast.';
     else if (winners.length === 1)
       winnerLine = `\n\n🏆 **Winner: ${winners[0]}** (${max} vote${max === 1 ? '' : 's'})`;
@@ -200,42 +219,49 @@ export function buildPollEmbed(poll, { final = false } = {}) {
   }
 
   const ends = poll.endsAt
-    ? `<t:${Math.floor(poll.endsAt / 1000)}:R> · <t:${Math.floor(poll.endsAt / 1000)}:f>`
+    ? `<t:${Math.floor(poll.endsAt / 1000)}:R>\n<t:${Math.floor(poll.endsAt / 1000)}:f>`
     : '—';
 
-  return new EmbedBuilder()
-    .setColor(final ? 0x0fdda3 : 0xff4655)
-    .setTitle(final ? `Poll closed · ${poll.question}` : `📊 ${poll.question}`)
+  const embed = new EmbedBuilder()
+    .setColor(reveal ? 0x0fdda3 : 0xff4655)
+    .setTitle(reveal ? `Poll closed · ${poll.question}` : `📊 ${poll.question}`)
     .setDescription(lines.join('\n\n') + winnerLine)
     .addFields(
       {
-        name: final ? 'Closed' : 'Ends',
-        value: final
+        name: reveal ? 'Closed' : '⏱ Ends',
+        value: reveal
           ? poll.endedAt
             ? `<t:${Math.floor(poll.endedAt / 1000)}:f>`
             : 'Closed'
           : ends,
         inline: true,
       },
-      { name: 'Total votes', value: `**${total}**`, inline: true },
       {
-        name: 'Options',
-        value: String(options.length),
+        name: reveal ? 'Total votes' : 'Options',
+        value: reveal ? `**${total}**` : `**${options.length}** choices`,
+        inline: true,
+      },
+      {
+        name: 'Status',
+        value: reveal ? '🔒 Results in' : '🗳️ Voting open',
         inline: true,
       },
     )
     .setFooter({
-      text: final
-        ? 'Yuri\'s Chamber · poll ended'
-        : 'Click a button to vote · you can change your vote',
+      text: reveal
+        ? "Yuri's Chamber · results"
+        : "Yuri's Chamber · votes are hidden until the poll ends · change vote anytime",
     })
-    .setTimestamp(final ? new Date(poll.endedAt || Date.now()) : new Date());
+    .setTimestamp(reveal ? new Date(poll.endedAt || Date.now()) : new Date());
+
+  return embed;
 }
 
 export function buildPollButtons(poll, disabled = false) {
   const rows = [];
   let row = new ActionRowBuilder();
-  const { options, total, max } = getPollStats(poll);
+  const { options, max } = getPollStats(poll);
+  const reveal = disabled || poll.ended === true;
 
   poll.options.forEach((o, i) => {
     if (i > 0 && i % 5 === 0) {
@@ -243,19 +269,19 @@ export function buildPollButtons(poll, disabled = false) {
       row = new ActionRowBuilder();
     }
     const n = o.votes?.length || 0;
-    const label =
-      n > 0
-        ? `${String(o.label).slice(0, 60)} (${n})`.slice(0, 80)
-        : String(o.label).slice(0, 80);
+    // Hide counts on buttons until poll ends
+    const label = reveal && n >= 0
+      ? `${String(o.label).slice(0, 55)} (${n})`.slice(0, 80)
+      : String(o.label).slice(0, 80);
 
     let style = ButtonStyle.Secondary;
-    if (disabled && max > 0 && n === max) style = ButtonStyle.Success;
-    else if (!disabled && n > 0) style = ButtonStyle.Primary;
+    if (reveal && max > 0 && n === max) style = ButtonStyle.Success;
+    else if (!reveal) style = ButtonStyle.Primary;
 
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`poll_vote:${poll.id}:${i}`)
-        .setLabel(label)
+        .setLabel(label || `Option ${i + 1}`)
         .setStyle(style)
         .setDisabled(disabled),
     );
@@ -338,7 +364,7 @@ export async function deletePoll(client, pollId) {
 /** Remove poll data when Discord message is gone */
 export async function purgePollIfMessageMissing(client, poll) {
   if (!poll?.id) return false;
-  if (!poll.messageId) return false;
+  if (!poll.messageId || !poll.channelId) return false;
 
   try {
     const channel = await client.channels.fetch(poll.channelId).catch(() => null);
@@ -346,16 +372,22 @@ export async function purgePollIfMessageMissing(client, poll) {
       await deletePoll(client, poll.id);
       return true;
     }
-    const msg = await channel.messages.fetch(poll.messageId).catch((err) => {
-      if (err?.code === 10008) return null;
-      return undefined; // network / other — don't purge
-    });
-    if (msg === null) {
-      await deletePoll(client, poll.id);
-      return true;
+    try {
+      await channel.messages.fetch(poll.messageId);
+      return false; // still exists
+    } catch (err) {
+      const code = err?.code || err?.rawError?.code;
+      // 10008 Unknown Message, 50001 Missing Access, 50013 Missing Permissions
+      if (code === 10008 || code === 1025 || String(err?.message || '').includes('Unknown Message')) {
+        await deletePoll(client, poll.id);
+        return true;
+      }
+      // Other errors: don't purge
+      return false;
     }
-  } catch (_) {}
-  return false;
+  } catch (_) {
+    return false;
+  }
 }
 
 export async function endPoll(client, poll) {
