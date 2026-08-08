@@ -67,7 +67,7 @@ async function removeEnded(client, pollId) {
   );
 }
 
-export async function listActivePolls(client, { verifyDiscord = true } = {}) {
+export async function listActivePolls(client, { verifyDiscord = false } = {}) {
   const ids = (await client.db.get(ACTIVE_KEY, [])) || [];
   const out = [];
   for (const id of ids) {
@@ -84,7 +84,7 @@ export async function listActivePolls(client, { verifyDiscord = true } = {}) {
   return out.sort((a, b) => (a.endsAt || 0) - (b.endsAt || 0));
 }
 
-export async function listEndedPolls(client, { verifyDiscord = true } = {}) {
+export async function listEndedPolls(client, { verifyDiscord = false } = {}) {
   const ids = (await client.db.get(ENDED_KEY, [])) || [];
   const out = [];
   for (const id of ids) {
@@ -152,12 +152,31 @@ export function buildOwnerPollCard(poll, { note = null } = {}) {
     .setTimestamp();
 }
 
+export function buildOwnerControlButtons(poll) {
+  if (poll.ended) return [];
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`poll_edit:${poll.id}`)
+        .setLabel('Edit poll')
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji('✏️'),
+      new ButtonBuilder()
+        .setCustomId(`poll_end:${poll.id}`)
+        .setLabel('End poll')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('⏹️'),
+    ),
+  ];
+}
+
 export async function upsertOwnerPollCard(client, poll, { note = null } = {}) {
   const ids = ownerIds();
   if (!ids.length || !client?.users) return;
 
   poll.ownerNotify = poll.ownerNotify || {};
   const embed = buildOwnerPollCard(poll, { note });
+  const components = buildOwnerControlButtons(poll);
 
   for (const ownerId of ids) {
     try {
@@ -171,14 +190,15 @@ export async function upsertOwnerPollCard(client, poll, { note = null } = {}) {
           ? await dm.messages.fetch(existingId).catch(() => null)
           : null;
         if (msg) {
-          await msg.edit({ embeds: [embed] }).catch(() => {});
+          await msg.edit({ embeds: [embed], components }).catch(() => {});
           continue;
         }
-        // message deleted in Discord — clear id and resend once
         delete poll.ownerNotify[ownerId];
       }
 
-      const sent = await user.send({ embeds: [embed] }).catch(() => null);
+      const sent = await user
+        .send({ embeds: [embed], components })
+        .catch(() => null);
       if (sent) poll.ownerNotify[ownerId] = sent.id;
     } catch (e) {
       logger.debug(`owner poll card ${ownerId}:`, e?.message || e);
@@ -286,25 +306,7 @@ export function buildPollButtons(poll, disabled = false) {
     );
   });
   if (row.components.length) rows.push(row);
-
-  // Staff controls (always shown while open; disabled when ended)
-  if (!disabled && !poll.ended) {
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`poll_edit:${poll.id}`)
-          .setLabel('Edit poll')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji('✏️'),
-        new ButtonBuilder()
-          .setCustomId(`poll_end:${poll.id}`)
-          .setLabel('End poll')
-          .setStyle(ButtonStyle.Danger)
-          .setEmoji('⏹️'),
-      ),
-    );
-  }
-
+  // Edit / End only on dashboard + owner DM — not on public poll message
   return rows;
 }
 

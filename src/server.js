@@ -783,10 +783,14 @@ app.post(path('/dashboard/commands/toggle'), requireAuth, async (req, res) => {
 
 app.get(path('/api/polls'), requireAuth, async (req, res) => {
   try {
+    if (!discordClient?.db) {
+      return res.json({ ok: true, tab: req.query.tab || 'active', polls: [] });
+    }
     const tab = req.query.tab === 'ended' ? 'ended' : 'active';
+    // Fast path: no Discord verify here (cron handles deleted messages)
     const polls = tab === 'ended'
-      ? await listEndedPolls(discordClient)
-      : await listActivePolls(discordClient);
+      ? await listEndedPolls(discordClient, { verifyDiscord: false })
+      : await listActivePolls(discordClient, { verifyDiscord: false });
     const payload = (polls || []).map((poll) => {
       const stats = getPollStats(poll);
       return {
@@ -804,10 +808,10 @@ app.get(path('/api/polls'), requireAuth, async (req, res) => {
     });
     res.json({ ok: true, tab, polls: payload });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    console.error('api/polls', e);
+    res.status(200).json({ ok: false, tab: req.query.tab || 'active', polls: [], error: String(e.message || e) });
   }
 });
-
 
 
 app.post(path('/dashboard/polls/end'), requireAuth, async (req, res) => {
@@ -1087,11 +1091,16 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
       async function tick(force){
         try{
           const r = await fetch(apiBase + '?tab=' + encodeURIComponent(tab), { credentials:'same-origin' });
-          if(!r.ok) return;
-          const d = await r.json();
+          const d = await r.json().catch(function(){ return null; });
+          if(!d){
+            document.getElementById('poll-list').innerHTML = '<div class="card"><p class="err">Failed to load polls.</p></div>';
+            return;
+          }
           if(force) lastFp = '';
           render(d.polls||[]);
-        }catch(e){}
+        }catch(e){
+          document.getElementById('poll-list').innerHTML = '<div class="card"><p class="err">Network error loading polls.</p></div>';
+        }
       }
       tick(true);
       setInterval(function(){ tick(false); }, 3000);
