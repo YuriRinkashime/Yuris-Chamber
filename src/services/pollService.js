@@ -7,17 +7,32 @@ import {
 import { logger } from '../utils/logger.js';
 
 const ACTIVE_KEY = 'polls:active';
+const ENDED_KEY = 'polls:ended';
 
 function pollKey(pollId) {
   return `poll:${pollId}`;
 }
 
+export function getPollStats(poll) {
+  const options = (poll?.options || []).map((o) => ({
+    label: o.label,
+    votes: (o.votes || []).length,
+  }));
+  const total = options.reduce((s, o) => s + o.votes, 0);
+  const max = Math.max(0, ...options.map((o) => o.votes));
+  const winners =
+    max === 0 ? [] : options.filter((o) => o.votes === max).map((o) => o.label);
+  return { options, total, max, winners };
+}
+
 export async function savePoll(client, poll) {
   await client.db.set(pollKey(poll.id), poll);
-  const active = (await client.db.get(ACTIVE_KEY, [])) || [];
-  if (!active.includes(poll.id)) {
-    active.push(poll.id);
-    await client.db.set(ACTIVE_KEY, active);
+  if (!poll.ended) {
+    const active = (await client.db.get(ACTIVE_KEY, [])) || [];
+    if (!active.includes(poll.id)) {
+      active.push(poll.id);
+      await client.db.set(ACTIVE_KEY, active);
+    }
   }
 }
 
@@ -33,27 +48,69 @@ export async function removeActive(client, pollId) {
   );
 }
 
+async function pushEnded(client, pollId) {
+  let ended = (await client.db.get(ENDED_KEY, [])) || [];
+  ended = [pollId, ...ended.filter((id) => id !== pollId)].slice(0, 80);
+  await client.db.set(ENDED_KEY, ended);
+}
+
+export async function listActivePolls(client) {
+  const ids = (await client.db.get(ACTIVE_KEY, [])) || [];
+  const out = [];
+  for (const id of ids) {
+    const p = await getPoll(client, id);
+    if (p && !p.ended) out.push(p);
+  }
+  return out.sort((a, b) => (a.endsAt || 0) - (b.endsAt || 0));
+}
+
+export async function listEndedPolls(client) {
+  const ids = (await client.db.get(ENDED_KEY, [])) || [];
+  const out = [];
+  for (const id of ids) {
+    const p = await getPoll(client, id);
+    if (p) out.push(p);
+  }
+  return out.sort((a, b) => (b.endedAt || b.endsAt || 0) - (a.endedAt || a.endsAt || 0));
+}
+
+function ownerIds() {
+  const raw = process.env.OWNER_IDS || process.env.OWNER_ID || '';
+  return String(raw)
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** DM all bot owners about a poll event */
+export async function notifyOwnersPoll(client, text) {
+  const ids = ownerIds();
+  if (!ids.length || !client?.users) return;
+  for (const id of ids) {
+    try {
+      const u = await client.users.fetch(id).catch(() => null);
+      if (u) await u.send({ content: text.slice(0, 2000) }).catch(() => {});
+    } catch (_) {}
+  }
+}
+
 export function buildPollEmbed(poll, { final = false } = {}) {
-  const total = poll.options.reduce((s, o) => s + (o.votes?.length || 0), 0);
-  const lines = poll.options.map((o, i) => {
-    const n = o.votes?.length || 0;
-    const pct = total ? Math.round((n / total) * 100) : 0;
+  const { options, total, winners, max } = getPollStats(poll);
+  const lines = options.map((o, i) => {
+    const pct = total ? Math.round((o.votes / total) * 100) : 0;
     const bar =
       final || poll.showCounts
-        ? ` — **${n}** vote${n === 1 ? '' : 's'} (${pct}%)`
+        ? ` — **${o.votes}** vote${o.votes === 1 ? '' : 's'} (${pct}%)`
         : '';
     return `**${i + 1}.** ${o.label}${bar}`;
   });
 
   let winnerLine = '';
   if (final) {
-    const max = Math.max(...poll.options.map((o) => o.votes?.length || 0), 0);
-    const winners = poll.options.filter((o) => (o.votes?.length || 0) === max);
     if (max === 0) winnerLine = '\n\n**Result:** No votes.';
     else if (winners.length === 1)
-      winnerLine = `\n\n🏆 **Winner:** ${winners[0].label} (${max} vote${max === 1 ? '' : 's'})`;
-    else
-      winnerLine = `\n\n🤝 **Tie:** ${winners.map((w) => w.label).join(', ')} (${max} each)`;
+      winnerLine = `\n\n🏆 **Winner:** ${winners[0]} (${max} vote${max === 1 ? '' : 's'})`;
+    else winnerLine = `\n\n🤝 **Tie:** ${winners.join(', ')} (${max} each)`;
   }
 
   const ends = poll.endsAt ? `<t:${Math.floor(poll.endsAt / 1000)}:R>` : '—';
@@ -85,7 +142,7 @@ export function buildPollButtons(poll, disabled = false) {
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`poll_vote:${poll.id}:${i}`)
-        .setLabel(o.label.slice(0, 80))
+        .setLabel(String(o.label).slice(0, 80))
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(disabled),
     );
@@ -102,24 +159,38 @@ export async function endPoll(client, poll) {
   poll.showCounts = true;
   await client.db.set(pollKey(poll.id), poll);
   await removeActive(client, poll.id);
+  await pushEnded(client, poll.id);
 
   try {
     const channel = await client.channels.fetch(poll.channelId).catch(() => null);
-    if (!channel?.isTextBased?.()) return poll;
-
-    const embed = buildPollEmbed(poll, { final: true });
-    const components = buildPollButtons(poll, true);
-
-    if (poll.messageId) {
-      const msg = await channel.messages.fetch(poll.messageId).catch(() => null);
-      if (msg) await msg.edit({ embeds: [embed], components }).catch(() => {});
-      else await channel.send({ embeds: [embed], components }).catch(() => {});
-    } else {
-      await channel.send({ embeds: [embed], components }).catch(() => {});
+    if (channel?.isTextBased?.()) {
+      const embed = buildPollEmbed(poll, { final: true });
+      const components = buildPollButtons(poll, true);
+      if (poll.messageId) {
+        const msg = await channel.messages.fetch(poll.messageId).catch(() => null);
+        if (msg) await msg.edit({ embeds: [embed], components }).catch(() => {});
+        else await channel.send({ embeds: [embed], components }).catch(() => {});
+      } else {
+        await channel.send({ embeds: [embed], components }).catch(() => {});
+      }
     }
   } catch (e) {
     logger.error('endPoll failed:', e?.message || e);
   }
+
+  const { total, winners, max } = getPollStats(poll);
+  const winText =
+    max === 0
+      ? 'No votes'
+      : winners.length === 1
+        ? `Winner: **${winners[0]}** (${max})`
+        : `Tie: **${winners.join(', ')}** (${max} each)`;
+
+  await notifyOwnersPoll(
+    client,
+    `📊 **Poll ended**\n**${poll.question}**\nTotal votes: **${total}**\n${winText}\nChannel: <#${poll.channelId}>`,
+  );
+
   return poll;
 }
 
@@ -133,6 +204,7 @@ export async function checkPolls(client) {
       const poll = await getPoll(client, id);
       if (!poll || poll.ended) {
         await removeActive(client, id);
+        if (poll?.ended) await pushEnded(client, id);
         continue;
       }
       if (poll.endsAt && now >= poll.endsAt) {

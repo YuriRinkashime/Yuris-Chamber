@@ -5,6 +5,8 @@ import {
   buildPollEmbed,
   buildPollButtons,
   endPoll,
+  getPollStats,
+  notifyOwnersPoll,
 } from '../../../services/pollService.js';
 
 export default {
@@ -51,6 +53,16 @@ export default {
     opt.votes = opt.votes || [];
     opt.votes.push(userId);
     await savePoll(client, poll);
+
+    const { total } = getPollStats(poll);
+    // Fire-and-forget owner DM (don't block the vote)
+    notifyOwnersPoll(
+      client,
+      `🗳️ **Poll vote**\n**${poll.question}**\n` +
+        `${interaction.user.tag} → **${opt.label}**\n` +
+        `Total votes now: **${total}**\n` +
+        `<#${poll.channelId}>`,
+    ).catch(() => {});
 
     try {
       await interaction.update({

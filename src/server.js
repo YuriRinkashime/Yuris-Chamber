@@ -2,6 +2,11 @@ import express from 'express';
 import crypto from 'crypto';
 import { getAiConfig, saveAiConfig } from './services/aiService.js';
 import {
+  listActivePolls,
+  listEndedPolls,
+  getPollStats,
+} from './services/pollService.js';
+import {
   formatUptime,
   getBotStartedAt,
   isMaintenanceModeRuntime,
@@ -117,6 +122,7 @@ function layout(title, body, active = '') {
     ['ai', 'AI', '✦', path('/dashboard/ai')],
     ['commands', 'Commands', '▣', path('/dashboard/commands')],
     ['dms', 'DMs', '✉', path('/dashboard/dms')],
+    ['polls', 'Polls', '📊', path('/dashboard/polls')],
     ['maintenance', 'Maintenance', '⚙', path('/dashboard/maintenance')],
   ]
     .map(
@@ -767,6 +773,72 @@ app.post(path('/dashboard/commands/toggle'), requireAuth, async (req, res) => {
   } catch (e) {
     res.redirect(path('/dashboard/commands') + `?err=${encodeURIComponent(e.message)}`);
   }
+});
+
+
+app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
+  const tab = req.query.tab === 'ended' ? 'ended' : 'active';
+  let polls = [];
+  try {
+    polls = tab === 'ended'
+      ? await listEndedPolls(discordClient)
+      : await listActivePolls(discordClient);
+  } catch (e) {
+    polls = [];
+  }
+
+  const tabs = `
+    <div class="row" style="margin-bottom:14px">
+      <a class="btn ${tab === 'active' ? '' : 'secondary'}" href="${path('/dashboard/polls')}?tab=active">Active</a>
+      <a class="btn ${tab === 'ended' ? '' : 'secondary'}" href="${path('/dashboard/polls')}?tab=ended">Ended</a>
+    </div>`;
+
+  const cards = polls.length
+    ? polls.map((poll) => {
+        const stats = getPollStats(poll);
+        const win =
+          stats.max === 0
+            ? '—'
+            : stats.winners.length === 1
+              ? escapeHtml(stats.winners[0])
+              : 'Tie: ' + stats.winners.map(escapeHtml).join(', ');
+        const ends = poll.endsAt
+          ? new Date(poll.endsAt).toLocaleString()
+          : '—';
+        const opts = stats.options
+          .map(
+            (o) =>
+              `<div class="poll-opt"><span>${escapeHtml(o.label)}</span><strong>${o.votes}</strong></div>`,
+          )
+          .join('');
+        return `<div class="card poll-card">
+          <h2 style="color:var(--text);text-transform:none;letter-spacing:0;font-size:16px;margin-bottom:8px">${escapeHtml(poll.question)}</h2>
+          <p class="muted" style="margin:0 0 10px">#${escapeHtml(poll.channelId)} · ends/ended ${escapeHtml(ends)}</p>
+          <div class="poll-opts">${opts}</div>
+          <div class="row" style="margin-top:12px">
+            <span class="badge on">Total ${stats.total}</span>
+            <span class="badge ${tab === 'ended' ? 'on' : 'off'}">${tab === 'ended' ? 'Winner: ' + win : 'Leading: ' + win}</span>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="card"><p class="muted">No ${tab} polls.</p></div>`;
+
+  res.send(
+    layout(
+      'Polls',
+      `<h1>Polls</h1>
+      <div class="banner"><div class="cap">${tab === 'active' ? 'Live ballots' : 'Closed polls'}<small>Totals · winners · Firebase</small></div></div>
+      ${tabs}
+      ${cards}
+      <style>
+        .poll-opts{display:flex;flex-direction:column;gap:6px}
+        .poll-opt{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;background:rgba(0,0,0,.3);border:1px solid var(--line);font-size:13px}
+        .poll-opt strong{color:var(--val2)}
+        .poll-card{clip-path:none!important;border-radius:10px}
+      </style>`,
+      'polls',
+    ),
+  );
 });
 
 app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {

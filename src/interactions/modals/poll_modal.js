@@ -4,12 +4,12 @@ import {
   savePoll,
   buildPollEmbed,
   buildPollButtons,
+  notifyOwnersPoll,
 } from '../../services/pollService.js';
 
 export default {
   name: 'poll_modal',
   async execute(interaction) {
-    // customId: poll_modal:CHANNEL_ID
     const channelId = interaction.customId.split(':')[1];
     const question = interaction.fields.getTextInputValue('question').trim();
     const rawOptions = interaction.fields.getTextInputValue('options');
@@ -80,6 +80,13 @@ export default {
       });
       poll.messageId = msg.id;
       await savePoll(interaction.client, poll);
+
+      notifyOwnersPoll(
+        interaction.client,
+        `📊 **New poll**\n**${question}**\n` +
+          `${options.length} options · ends <t:${Math.floor(endsAt / 1000)}:R>\n` +
+          `${channel}`,
+      ).catch(() => {});
 
       return interaction.editReply({
         content:
