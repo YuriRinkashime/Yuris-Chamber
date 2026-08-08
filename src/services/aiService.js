@@ -194,6 +194,16 @@ export async function clearDmAiHistory(client, userId) {
  * Use this for ALL DM AI (button, auto-5min, dashboard).
  * Loads history + server profile, generates, saves DM history.
  */
+function fixAiMentions(text, userId) {
+  if (!text) return text;
+  let out = String(text);
+  out = out.replace(/<@USER_ID>/gi, `<@${userId}>`);
+  out = out.replace(/@USER_ID\b/gi, `<@${userId}>`);
+  out = out.replace(/\{USER_ID\}/gi, String(userId));
+  out = out.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`);
+  return out;
+}
+
 export async function generateDmReply(client, userId, userMessage) {
   const guildId = process.env.GUILD_ID;
   const config = await getAiConfig(client, guildId);
@@ -245,7 +255,7 @@ export async function generateDmReply(client, userId, userMessage) {
       `\n${serverCtx}` +
       `\nUse the conversation history. Do not re-ask language preference if already set.` +
       `\nBe short, friendly, Gen Z. Remember what THIS user already told you.` +
-      `\n\nMENTION RULE: Write mentions as <@USER_ID> only (never bare @numbers).`,
+      `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output the text USER_ID or <@USER_ID>.`,
   );
 
   let answer = await generateReply({
@@ -256,6 +266,7 @@ export async function generateDmReply(client, userId, userMessage) {
 
   const maxLen = config.maxReplyLength || 1800;
   if (answer.length > maxLen) answer = answer.slice(0, maxLen - 3) + '...';
+  answer = fixAiMentions(answer, userId);
   if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
 
   await saveDmAiHistory(client, userId, [

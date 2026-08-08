@@ -19,7 +19,8 @@ async function aiReply(interaction, client, userId) {
   if (!isBotOwner(interaction.user.id)) {
     return interaction.reply({
       content: 'Owner only.',
-      flags: MessageFlags.Ephemeral });
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   cancelAutoAi(userId);
@@ -36,35 +37,33 @@ async function aiReply(interaction, client, userId) {
     .find((m) => m.from === 'user');
   const userMessage = lastUser?.content || 'Hello';
 
-  const guildId = process.env.GUILD_ID;
-  const config = await getAiConfig(client, guildId);
-  if (!config.enabled) {
-    return interaction.editReply({ content: 'AI is disabled in the dashboard.' });
+  try {
+    const { generateDmReply } = await import('../../../services/aiService.js');
+    let answer = await generateDmReply(client, userId, userMessage);
+    answer = String(answer || '')
+      .replace(/<@USER_ID>/gi, `<@${userId}>`)
+      .replace(/@USER_ID\b/gi, `<@${userId}>`);
+    if (!answer.trim()) answer = 'yo';
+
+    const mentionIds = [...answer.matchAll(/<@!?(\d{17,20})>/g)].map((m) => m[1]);
+    await user.send({
+      content: answer,
+      allowedMentions: { users: mentionIds },
+    });
+    await appendBotDm(client, userId, answer, 'ai');
+    await updateOwnerNotify(client, userId, {
+      lastSent: answer,
+      footer: '🤖 AI reply sent',
+    });
+
+    return interaction.editReply({
+      content: (`**🤖 AI → ${user.tag}**\n\n${answer}`).slice(0, 2000),
+    });
+  } catch (e) {
+    return interaction.editReply({
+      content: `AI error: ${e.message || e}`,
+    });
   }
-
-  const systemInstructions = await buildSystemInstructions(
-    client,
-    guildId,
-    userId,
-    (config.systemInstructions || '') +
-      '\n\nPrivate DM as Yuri for BANORANT PH. Be short and helpful.',
-  );
-
-  let answer = await generateReply({
-    systemInstructions,
-    userMessage,
-    model: config.model,
-    history: [] });
-  if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
-
-  await user.send({ content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`), allowedMentions: { parse: ['users'] } });
-  await appendBotDm(client, userId, answer, 'ai');
-  await updateOwnerNotify(client, userId, {
-    lastSent: answer,
-    footer: '🤖 AI reply sent' });
-
-  return interaction.editReply({
-    content: (`**🤖 AI → ${user.tag}**\n\n${answer}`).slice(0, 2000) });
 }
 
 async function humanReplyModal(interaction, userId) {

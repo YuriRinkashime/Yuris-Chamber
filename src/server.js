@@ -178,7 +178,7 @@ body::after{
   mask-image:radial-gradient(ellipse at center,black 20%,transparent 75%);
 }
 a{color:inherit;text-decoration:none}
-.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px}
+.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px;overflow-x:hidden;width:100%;box-sizing:border-box}
 ${isLogin ? '.shell{max-width:100%;height:100vh;padding:0;display:flex;flex-direction:column}' : ''}
 
 .hero{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -382,9 +382,9 @@ ${
         ${body}
         <div class="credits">
           <strong>Credits</strong><br/>
-          Bot &amp; dashboard: <strong>RinkaYuri</strong> · BANORANT CAFE 🎮<br/>
+          Bot &amp; dashboard: <strong>Yuri Rinkashime (RinkaYuri)</strong> · BANORANT CAFE 🎮<br/>
           Runtime: Yuri's Chamber · Built for Filipino Valorant community<br/>
-          Design inspired by VALORANT chamber aesthetics · Not affiliated with Riot Games
+          Design inspired by VALORANT agent Chamber · Not affiliated with Riot Games
         </div>
         <p class="footer-note">Owner access only · sealed chamber</p>
       </div>`
@@ -778,21 +778,45 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
       <p class="muted">Live · no page reload</p>
       <div id="dm-list"><p class="muted">Loading…</p></div>
       <style>
-        .dm-card{margin-bottom:14px}
+        #dm-list{width:100%;max-width:100%;overflow:hidden}
+        .dm-card{
+          margin-bottom:14px;width:100%;max-width:100%;
+          overflow:hidden;box-sizing:border-box;
+          /* disable angled clip that cuts bubbles */
+          clip-path:none!important;border-radius:8px;
+        }
         .dm-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-        .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;color:var(--text)}
+        .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;color:var(--text);word-break:break-all}
         .dm-thread{
           display:flex;flex-direction:column;gap:8px;
-          max-height:280px;overflow:auto;padding:6px 4px 8px 2px;
+          max-height:320px;overflow-x:hidden;overflow-y:auto;
+          padding:8px 10px;width:100%;box-sizing:border-box;
+          background:rgba(0,0,0,.25);border:1px solid var(--line);
         }
-        .dm-thread{scrollbar-width:thin;scrollbar-color:rgba(255,70,85,.55) rgba(0,0,0,.3);border-radius:99px}
-        .dm-thread::-webkit-scrollbar-thumb:hover{background:rgba(255,70,85,.75)}
-        .bubble{max-width:92%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.4;word-break:break-word}
-        .bubble.user{align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid var(--border)}
-        .bubble.owner{align-self:flex-end;background:rgba(255,70,85,.55);border:1px solid rgba(255,70,85,.35)}
-        .bubble.ai{align-self:flex-end;background:rgba(93,222,160,.12);border:1px solid rgba(93,222,160,.3)}
+        .bubble{
+          max-width:min(85%, 520px);padding:10px 12px;border-radius:10px;
+          font-size:13px;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;
+          box-sizing:border-box;
+        }
+        .bubble.user{align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid var(--line)}
+        .bubble.owner{
+          align-self:flex-end;margin-left:auto;margin-right:0;
+          background:rgba(255,70,85,.25);border:1px solid rgba(255,70,85,.4);color:var(--text);
+          max-width:min(80%,480px);
+        }
+        .bubble.ai{
+          align-self:flex-start;margin-right:auto;margin-left:0;
+          background:rgba(15,221,163,.1);border:1px solid rgba(15,221,163,.3);
+          max-width:min(80%,480px);
+        }
+        .bubble.user{
+          align-self:flex-start;margin-right:auto;
+          max-width:min(80%,480px);
+        }
         .bubble .who{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600}
-        .dm-actions textarea{min-height:72px}
+        .dm-actions{margin-top:10px;width:100%;box-sizing:border-box}
+        .dm-actions textarea{min-height:72px;width:100%;box-sizing:border-box}
+        .dm-actions .row{flex-wrap:wrap}
         .dm-actions .btn:disabled{opacity:.5;cursor:wait}
       </style>
       <script>

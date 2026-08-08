@@ -116,7 +116,8 @@ export function scheduleAutoAi(client, userId) {
       const user = await client.users.fetch(id).catch(() => null);
       if (!user) return;
 
-      await user.send({ content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`), allowedMentions: { parse: ['users'] } });
+      answer = String(answer).replace(/<@USER_ID>/gi, `<@${id}>`).replace(/@USER_ID\b/gi, `<@${id}>`).replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, uid) => `${a}<@${uid}>`);
+      await user.send({ content: answer, allowedMentions: { users: [...answer.matchAll(/<@!?(\d{17,20})>/g)].map(m => m[1]) } });
       await appendBotDm(client, id, answer, 'ai');
       await updateOwnerNotify(client, id, {
         footer: '🤖 Auto-AI sent',
