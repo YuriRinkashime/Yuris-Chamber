@@ -31,9 +31,11 @@ export default {
       });
     }
 
-    const leftMin = poll.endsAt
-      ? Math.max(1, Math.ceil((poll.endsAt - Date.now()) / 60000))
-      : 60;
+    const leftSec = poll.endsAt
+      ? Math.max(10, Math.ceil((poll.endsAt - Date.now()) / 1000))
+      : 300;
+    const mins = Math.floor(leftSec / 60);
+    const secs = leftSec % 60;
 
     const modal = new ModalBuilder()
       .setCustomId(`poll_edit_modal:${poll.id}`)
@@ -55,18 +57,18 @@ export default {
       .setMaxLength(500)
       .setValue((poll.options || []).map((o) => o.label).join('\n').slice(0, 500));
 
-    const minutes = new TextInputBuilder()
-      .setCustomId('minutes')
-      .setLabel('Minutes left from now')
+    const duration = new TextInputBuilder()
+      .setCustomId('duration')
+      .setLabel('Time left (5 / 90s / 1:30 / 2m30s)')
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
-      .setMaxLength(5)
-      .setValue(String(leftMin));
+      .setMaxLength(20)
+      .setValue(mins > 0 ? `${mins}:${String(secs).padStart(2, '0')}` : `${secs}s`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(question),
       new ActionRowBuilder().addComponents(options),
-      new ActionRowBuilder().addComponents(minutes),
+      new ActionRowBuilder().addComponents(duration),
     );
 
     await interaction.showModal(modal);

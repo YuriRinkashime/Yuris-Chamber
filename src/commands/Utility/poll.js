@@ -8,9 +8,6 @@ import {
   ActionRowBuilder,
 } from 'discord.js';
 
-/**
- * /poll — opens a form (modal) to create a timed button poll
- */
 export default {
   data: new SlashCommandBuilder()
     .setName('poll')
@@ -49,19 +46,19 @@ export default {
       .setMaxLength(500)
       .setPlaceholder('Reyna\nJett\nChamber\nOmen');
 
-    const minutes = new TextInputBuilder()
-      .setCustomId('minutes')
-      .setLabel('Duration in minutes (1–10080)')
+    const duration = new TextInputBuilder()
+      .setCustomId('duration')
+      .setLabel('Duration (5 / 90s / 1:30 / 2m30s)')
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
-      .setMaxLength(5)
-      .setPlaceholder('60')
-      .setValue('60');
+      .setMaxLength(20)
+      .setPlaceholder('60s or 5 or 1:30')
+      .setValue('5');
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(question),
       new ActionRowBuilder().addComponents(options),
-      new ActionRowBuilder().addComponents(minutes),
+      new ActionRowBuilder().addComponents(duration),
     );
 
     await interaction.showModal(modal);

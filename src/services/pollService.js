@@ -432,6 +432,8 @@ export async function applyPollEdit(client, poll, {
   question,
   optionsText,
   minutes,
+  seconds,
+  totalSeconds,
 } = {}) {
   if (!poll || poll.ended) return { ok: false, error: 'Poll already ended' };
 
@@ -459,12 +461,33 @@ export async function applyPollEdit(client, poll, {
     }));
   }
 
-  if (minutes != null && String(minutes).trim() !== '') {
-    const m = parseInt(minutes, 10);
-    if (!Number.isFinite(m) || m < 1 || m > 10080) {
-      return { ok: false, error: 'Minutes must be 1–10080' };
+  // Duration: minutes + optional seconds (or totalSeconds)
+  let addMs = null;
+  if (totalSeconds != null && String(totalSeconds).trim() !== '') {
+    const sec = parseInt(totalSeconds, 10);
+    if (!Number.isFinite(sec) || sec < 10 || sec > 10080 * 60) {
+      return { ok: false, error: 'Duration must be 10 seconds – 7 days' };
     }
-    poll.endsAt = Date.now() + m * 60 * 1000;
+    addMs = sec * 1000;
+  } else {
+    const m = minutes != null && String(minutes).trim() !== '' ? parseInt(minutes, 10) : 0;
+    const s = seconds != null && String(seconds).trim() !== '' ? parseInt(seconds, 10) : 0;
+    if (m || s) {
+      if (!Number.isFinite(m) || m < 0 || m > 10080) {
+        return { ok: false, error: 'Minutes must be 0–10080' };
+      }
+      if (!Number.isFinite(s) || s < 0 || s > 59) {
+        return { ok: false, error: 'Seconds must be 0–59' };
+      }
+      const total = m * 60 + s;
+      if (total < 10) {
+        return { ok: false, error: 'Minimum duration is 10 seconds' };
+      }
+      addMs = total * 1000;
+    }
+  }
+  if (addMs != null) {
+    poll.endsAt = Date.now() + addMs;
   }
 
   await savePoll(client, poll);

@@ -13,12 +13,28 @@ export default {
     const channelId = interaction.customId.split(':')[1];
     const question = interaction.fields.getTextInputValue('question').trim();
     const rawOptions = interaction.fields.getTextInputValue('options');
-    const minutesRaw = interaction.fields.getTextInputValue('minutes').trim();
+    const durationRaw = interaction.fields.getTextInputValue('duration').trim();
 
-    const minutes = parseInt(minutesRaw, 10);
-    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 10080) {
+    // duration: "5" = 5 minutes, "90s" = 90 seconds, "1m30s" or "1:30"
+    function parseDuration(str) {
+      const s = String(str).trim().toLowerCase();
+      let total = 0;
+      const m1 = s.match(/^(\d+)\s*:\s*(\d+)$/); // m:ss
+      if (m1) return parseInt(m1[1], 10) * 60 + parseInt(m1[2], 10);
+      const m2 = s.match(/^(\d+)\s*m(?:in(?:ute)?s?)?\s*(\d+)\s*s(?:ec(?:ond)?s?)?$/);
+      if (m2) return parseInt(m2[1], 10) * 60 + parseInt(m2[2], 10);
+      if (/^\d+\s*s(ec(ond)?s?)?$/.test(s)) return parseInt(s, 10);
+      if (/^\d+\s*m(in(ute)?s?)?$/.test(s)) return parseInt(s, 10) * 60;
+      if (/^\d+$/.test(s)) return parseInt(s, 10) * 60; // bare number = minutes
+      return NaN;
+    }
+
+    const totalSec = parseDuration(durationRaw);
+    if (!Number.isFinite(totalSec) || totalSec < 10 || totalSec > 10080 * 60) {
       return interaction.reply({
-        content: 'Minutes must be a number from **1** to **10080** (7 days).',
+        content:
+          'Duration invalid. Use **10+ seconds**.\n' +
+          'Examples: `5` (5 min), `90s`, `1:30`, `2m30s`',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -32,7 +48,7 @@ export default {
     if (labels.length < 2) {
       return interaction.reply({
         content:
-          'Need **at least 2** options.\nPut each option on its **own line** (or separate with `|`).',
+          'Need **at least 2** options.\nPut each option on its **own line**.',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -55,7 +71,7 @@ export default {
     }));
 
     const pollId = randomBytes(6).toString('hex');
-    const endsAt = Date.now() + minutes * 60 * 1000;
+    const endsAt = Date.now() + totalSec * 1000;
 
     const poll = {
       id: pollId,
