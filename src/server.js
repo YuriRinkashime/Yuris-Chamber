@@ -6,6 +6,9 @@ import {
   listEndedPolls,
   getPollStats,
   deletePoll,
+  endPoll,
+  applyPollEdit,
+  getPoll,
 } from './services/pollService.js';
 import {
   formatUptime,
@@ -806,6 +809,59 @@ app.get(path('/api/polls'), requireAuth, async (req, res) => {
 });
 
 
+
+app.post(path('/dashboard/polls/end'), requireAuth, async (req, res) => {
+  const wantsJson = (req.headers.accept || '').includes('application/json');
+  const pollId = String(req.body.pollId || '').trim();
+  if (!pollId) {
+    if (wantsJson) return res.status(400).json({ ok: false, error: 'Missing pollId' });
+    return res.redirect(path('/dashboard/polls'));
+  }
+  try {
+    const poll = await getPoll(discordClient, pollId);
+    if (!poll) {
+      if (wantsJson) return res.status(404).json({ ok: false, error: 'Not found' });
+      return res.redirect(path('/dashboard/polls') + '?err=1');
+    }
+    await endPoll(discordClient, poll);
+    if (wantsJson) return res.json({ ok: true });
+    return res.redirect(path('/dashboard/polls') + '?tab=ended&ok=1');
+  } catch (e) {
+    if (wantsJson) return res.status(500).json({ ok: false, error: e.message });
+    return res.redirect(path('/dashboard/polls') + '?err=1');
+  }
+});
+
+app.post(path('/dashboard/polls/edit'), requireAuth, async (req, res) => {
+  const wantsJson = (req.headers.accept || '').includes('application/json');
+  const pollId = String(req.body.pollId || '').trim();
+  if (!pollId) {
+    if (wantsJson) return res.status(400).json({ ok: false, error: 'Missing pollId' });
+    return res.redirect(path('/dashboard/polls'));
+  }
+  try {
+    const poll = await getPoll(discordClient, pollId);
+    if (!poll) {
+      if (wantsJson) return res.status(404).json({ ok: false, error: 'Not found' });
+      return res.redirect(path('/dashboard/polls') + '?err=1');
+    }
+    const result = await applyPollEdit(discordClient, poll, {
+      question: req.body.question,
+      optionsText: req.body.options,
+      minutes: req.body.minutes,
+    });
+    if (!result.ok) {
+      if (wantsJson) return res.status(400).json(result);
+      return res.redirect(path('/dashboard/polls') + '?err=1');
+    }
+    if (wantsJson) return res.json({ ok: true });
+    return res.redirect(path('/dashboard/polls') + '?tab=active&ok=1');
+  } catch (e) {
+    if (wantsJson) return res.status(500).json({ ok: false, error: e.message });
+    return res.redirect(path('/dashboard/polls') + '?err=1');
+  }
+});
+
 app.post(path('/dashboard/polls/delete'), requireAuth, async (req, res) => {
   const wantsJson = (req.headers.accept || '').includes('application/json');
   const pollId = String(req.body.pollId || '').trim();
@@ -871,6 +927,8 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
       <script>
       const apiBase = ${JSON.stringify(path('/api/polls'))};
       const delUrl = ${JSON.stringify(path('/dashboard/polls/delete'))};
+      const endUrl = ${JSON.stringify(path('/dashboard/polls/end'))};
+      const editUrl = ${JSON.stringify(path('/dashboard/polls/edit'))};
       let tab = ${JSON.stringify(tab)};
       let lastFp = '';
       let scrollY = 0;
@@ -937,11 +995,31 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
           const timeBit = poll.ended
             ? esc(poll.endedAt ? new Date(poll.endedAt).toLocaleString() : 'ended')
             : '<span data-ends="'+(poll.endsAt||0)+'">'+remain(poll.endsAt)+'</span>';
+          const leftMin = poll.endsAt ? Math.max(1, Math.ceil((poll.endsAt - Date.now())/60000)) : 60;
+          const optsText = (poll.options||[]).map(function(o){ return o.label; }).join('\n');
+          const actions = poll.ended
+            ? '<button type="button" class="btn danger" data-del="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Delete</button>'
+            : '<button type="button" class="btn secondary" data-edit-toggle="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Edit</button>'+
+              '<button type="button" class="btn" data-end="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">End</button>'+
+              '<button type="button" class="btn danger" data-del="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Delete</button>';
           return '<div class="card poll-card" data-poll="'+esc(poll.id)+'">'+
-            '<div class="row" style="justify-content:space-between;align-items:flex-start">'+
+            '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
               '<h2 style="color:var(--text);text-transform:none;letter-spacing:0;font-size:16px;margin:0">'+esc(poll.question)+'</h2>'+
-              '<button type="button" class="btn danger" data-del="'+esc(poll.id)+'" style="padding:8px 12px;font-size:12px">Delete</button>'+
+              '<div class="row" style="gap:6px">'+actions+'</div>'+
             '</div>'+
+            (poll.ended ? '' : (
+              '<div class="poll-edit" id="edit-'+esc(poll.id)+'" style="display:none;margin:12px 0;padding:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px">'+
+                '<label class="muted" style="font-size:11px">Question</label>'+
+                '<input type="text" data-eq="'+esc(poll.id)+'" value="'+esc(poll.question)+'" maxlength="200"/>'+
+                '<label class="muted" style="font-size:11px;margin-top:8px;display:block">Options (one per line)</label>'+
+                '<textarea data-eo="'+esc(poll.id)+'" rows="4">'+esc(optsText)+'</textarea>'+
+                '<label class="muted" style="font-size:11px;margin-top:8px;display:block">Minutes left from now</label>'+
+                '<input type="number" data-em="'+esc(poll.id)+'" value="'+leftMin+'" min="1" max="10080" style="max-width:120px"/>'+
+                '<div class="row" style="margin-top:10px">'+
+                  '<button type="button" class="btn" data-edit-save="'+esc(poll.id)+'">Save edit</button>'+
+                '</div>'+
+              '</div>'
+            ))+
             '<p class="muted" style="margin:8px 0 10px">#'+esc(poll.channelId)+' · '+timeBit+'</p>'+
             '<div class="poll-opts">'+opts+'</div>'+
             '<div class="row" style="margin-top:12px">'+
@@ -959,9 +1037,48 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
               method:'POST', credentials:'same-origin',
               headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
               body: body.toString()
+            }).then(function(){ lastFp=''; tick(true); }).catch(function(){});
+          };
+        });
+        document.querySelectorAll('button[data-end]').forEach(function(btn){
+          btn.onclick = function(){
+            if(!confirm('End this poll now and reveal results?')) return;
+            var body = new URLSearchParams();
+            body.set('pollId', btn.getAttribute('data-end'));
+            fetch(endUrl, {
+              method:'POST', credentials:'same-origin',
+              headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
+              body: body.toString()
+            }).then(function(){ lastFp=''; tab='ended'; setTabButtons(); tick(true); }).catch(function(){});
+          };
+        });
+        document.querySelectorAll('button[data-edit-toggle]').forEach(function(btn){
+          btn.onclick = function(){
+            var id = btn.getAttribute('data-edit-toggle');
+            var el = document.getElementById('edit-'+id);
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+          };
+        });
+        document.querySelectorAll('button[data-edit-save]').forEach(function(btn){
+          btn.onclick = function(){
+            var id = btn.getAttribute('data-edit-save');
+            var body = new URLSearchParams();
+            body.set('pollId', id);
+            var q = document.querySelector('input[data-eq="'+id+'"]');
+            var o = document.querySelector('textarea[data-eo="'+id+'"]');
+            var m = document.querySelector('input[data-em="'+id+'"]');
+            if(q) body.set('question', q.value);
+            if(o) body.set('options', o.value);
+            if(m) body.set('minutes', m.value);
+            fetch(editUrl, {
+              method:'POST', credentials:'same-origin',
+              headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
+              body: body.toString()
             }).then(function(r){ return r.json().catch(function(){ return { ok:r.ok }; }); })
-              .then(function(d){ lastFp=''; tick(true); })
-              .catch(function(){});
+              .then(function(d){
+                if(d && d.ok === false) alert(d.error || 'Edit failed');
+                lastFp=''; tick(true);
+              }).catch(function(){});
           };
         });
         requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });

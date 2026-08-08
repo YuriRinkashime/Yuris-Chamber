@@ -260,7 +260,7 @@ export function buildPollEmbed(poll, { final = false } = {}) {
 export function buildPollButtons(poll, disabled = false) {
   const rows = [];
   let row = new ActionRowBuilder();
-  const { options, max } = getPollStats(poll);
+  const { max } = getPollStats(poll);
   const reveal = disabled || poll.ended === true;
 
   poll.options.forEach((o, i) => {
@@ -269,8 +269,7 @@ export function buildPollButtons(poll, disabled = false) {
       row = new ActionRowBuilder();
     }
     const n = o.votes?.length || 0;
-    // Hide counts on buttons until poll ends
-    const label = reveal && n >= 0
+    const label = reveal
       ? `${String(o.label).slice(0, 55)} (${n})`.slice(0, 80)
       : String(o.label).slice(0, 80);
 
@@ -287,10 +286,28 @@ export function buildPollButtons(poll, disabled = false) {
     );
   });
   if (row.components.length) rows.push(row);
+
+  // Staff controls (always shown while open; disabled when ended)
+  if (!disabled && !poll.ended) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`poll_edit:${poll.id}`)
+          .setLabel('Edit poll')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('✏️'),
+        new ButtonBuilder()
+          .setCustomId(`poll_end:${poll.id}`)
+          .setLabel('End poll')
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji('⏹️'),
+      ),
+    );
+  }
+
   return rows;
 }
 
-/** Edit Discord poll message; returns false if message was deleted */
 export async function syncPollMessage(client, poll) {
   if (!poll?.channelId || !poll?.messageId) return true;
   try {
@@ -388,6 +405,70 @@ export async function purgePollIfMessageMissing(client, poll) {
   } catch (_) {
     return false;
   }
+}
+
+
+/** Check if member can manage this poll */
+export function canManagePoll(interaction, poll) {
+  if (!interaction.memberPermissions) {
+    // DM / missing — allow bot owner via env
+    const owners = String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
+      .split(/[,\s]+/)
+      .filter(Boolean);
+    return owners.includes(interaction.user.id);
+  }
+  if (interaction.memberPermissions.has('ManageMessages')) return true;
+  if (poll?.createdBy && poll.createdBy === interaction.user.id) return true;
+  const owners = String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  return owners.includes(interaction.user.id);
+}
+
+/** Apply edits from dashboard or Discord modal */
+export async function applyPollEdit(client, poll, {
+  question,
+  optionsText,
+  minutes,
+} = {}) {
+  if (!poll || poll.ended) return { ok: false, error: 'Poll already ended' };
+
+  if (question && String(question).trim()) {
+    poll.question = String(question).trim().slice(0, 200);
+  }
+
+  if (optionsText != null && String(optionsText).trim()) {
+    const labels = String(optionsText)
+      .split(/\r?\n|\|/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (labels.length < 2) {
+      return { ok: false, error: 'Need at least 2 options' };
+    }
+    // Keep votes for matching labels; drop votes for removed labels
+    const oldByLabel = Object.fromEntries(
+      (poll.options || []).map((o) => [o.label, o.votes || []]),
+    );
+    poll.options = labels.map((label, i) => ({
+      id: i,
+      label: label.slice(0, 80),
+      votes: oldByLabel[label] ? [...oldByLabel[label]] : [],
+    }));
+  }
+
+  if (minutes != null && String(minutes).trim() !== '') {
+    const m = parseInt(minutes, 10);
+    if (!Number.isFinite(m) || m < 1 || m > 10080) {
+      return { ok: false, error: 'Minutes must be 1–10080' };
+    }
+    poll.endsAt = Date.now() + m * 60 * 1000;
+  }
+
+  await savePoll(client, poll);
+  await syncPollMessage(client, poll);
+  await upsertOwnerPollCard(client, poll, { note: 'Poll edited' }).catch(() => {});
+  return { ok: true, poll };
 }
 
 export async function endPoll(client, poll) {
