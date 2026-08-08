@@ -775,48 +775,50 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
       'DMs',
       `<h1>Bot DMs</h1>
       <p class="muted" id="dm-flash"></p>
-      <p class="muted">Live · no page reload</p>
+      <p class="muted">Live updates · scroll & typing stay put</p>
       <div id="dm-list"><p class="muted">Loading…</p></div>
       <style>
-        #dm-list{width:100%;max-width:100%;overflow:hidden}
+        #dm-list{width:100%;max-width:100%;overflow:hidden;display:flex;flex-direction:column;gap:14px}
         .dm-card{
-          margin-bottom:14px;width:100%;max-width:100%;
-          overflow:hidden;box-sizing:border-box;
-          /* disable angled clip that cuts bubbles */
-          clip-path:none!important;border-radius:8px;
+          width:100%;max-width:100%;overflow:hidden;box-sizing:border-box;
+          clip-path:none!important;border-radius:10px;padding:16px;
         }
-        .dm-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+        .dm-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
         .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;color:var(--text);word-break:break-all}
         .dm-thread{
-          display:flex;flex-direction:column;gap:8px;
-          max-height:320px;overflow-x:hidden;overflow-y:auto;
-          padding:8px 10px;width:100%;box-sizing:border-box;
-          background:rgba(0,0,0,.25);border:1px solid var(--line);
+          display:flex;flex-direction:column;gap:10px;
+          max-height:360px;overflow-x:hidden;overflow-y:auto;
+          padding:12px;width:100%;box-sizing:border-box;
+          background:rgba(0,0,0,.35);border:1px solid var(--line);
+          border-radius:8px;
         }
         .bubble{
-          max-width:min(85%, 520px);padding:10px 12px;border-radius:10px;
+          max-width:min(78%, 460px);padding:10px 14px;border-radius:12px;
           font-size:13px;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;
           box-sizing:border-box;
         }
-        .bubble.user{align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid var(--line)}
-        .bubble.owner{
-          align-self:flex-end;margin-left:auto;margin-right:0;
-          background:rgba(255,70,85,.25);border:1px solid rgba(255,70,85,.4);color:var(--text);
-          max-width:min(80%,480px);
-        }
-        .bubble.ai{
-          align-self:flex-start;margin-right:auto;margin-left:0;
-          background:rgba(15,221,163,.1);border:1px solid rgba(15,221,163,.3);
-          max-width:min(80%,480px);
-        }
         .bubble.user{
           align-self:flex-start;margin-right:auto;
-          max-width:min(80%,480px);
+          background:rgba(255,255,255,.07);border:1px solid var(--line);
+          border-bottom-left-radius:4px;
         }
-        .bubble .who{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600}
-        .dm-actions{margin-top:10px;width:100%;box-sizing:border-box}
-        .dm-actions textarea{min-height:72px;width:100%;box-sizing:border-box}
-        .dm-actions .row{flex-wrap:wrap}
+        .bubble.owner,.bubble.ai{
+          align-self:flex-end;margin-left:auto;margin-right:0;
+          border-bottom-right-radius:4px;
+        }
+        .bubble.owner{
+          background:rgba(255,70,85,.28);border:1px solid rgba(255,70,85,.45);color:var(--text);
+        }
+        .bubble.ai{
+          background:rgba(15,221,163,.14);border:1px solid rgba(15,221,163,.4);color:var(--text);
+        }
+        .bubble .who{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+        .dm-actions{margin-top:12px;width:100%;box-sizing:border-box}
+        .dm-actions textarea{
+          min-height:80px;width:100%;box-sizing:border-box;border-radius:8px;
+        }
+        .dm-actions textarea:focus{border-color:var(--val);box-shadow:0 0 0 2px rgba(255,70,85,.15)}
+        .dm-actions .row{flex-wrap:wrap;margin-top:10px}
         .dm-actions .btn:disabled{opacity:.5;cursor:wait}
       </style>
       <script>
@@ -824,8 +826,11 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
       const replyUrl = ${JSON.stringify(path('/dashboard/dms/reply'))};
 
       const scrollMap = {};
-      let activeUserId = null;
       const draftMap = {};
+      let activeUserId = null;
+      let lastFingerprint = '';
+      let typingPauseUntil = 0;
+      let sending = false;
 
       function esc(s){
         return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -842,18 +847,26 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
       }
       function flash(msg, isErr){
         const el = document.getElementById('dm-flash');
+        if(!el) return;
         el.textContent = msg || '';
         el.className = isErr ? 'err' : 'ok';
-        if(msg) setTimeout(function(){ el.textContent=''; }, 4000);
+        if(msg) setTimeout(function(){ if(el.textContent===msg) el.textContent=''; }, 4000);
+      }
+
+      function isTyping(){
+        const a = document.activeElement;
+        return a && a.tagName === 'TEXTAREA' && a.hasAttribute('data-uid');
       }
 
       function saveScrollState(){
         document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
-          scrollMap[el.getAttribute('data-uid')] = el.scrollTop;
+          const uid = el.getAttribute('data-uid');
+          scrollMap[uid] = el.scrollTop;
         });
         document.querySelectorAll('textarea[data-uid]').forEach(function(el){
-          draftMap[el.getAttribute('data-uid')] = el.value;
-          if(document.activeElement === el) activeUserId = el.getAttribute('data-uid');
+          const uid = el.getAttribute('data-uid');
+          draftMap[uid] = el.value;
+          if(document.activeElement === el) activeUserId = uid;
         });
       }
 
@@ -861,19 +874,50 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
           const uid = el.getAttribute('data-uid');
           if(scrollMap[uid] != null) el.scrollTop = scrollMap[uid];
-          else el.scrollTop = el.scrollHeight;
         });
         document.querySelectorAll('textarea[data-uid]').forEach(function(el){
           const uid = el.getAttribute('data-uid');
           if(draftMap[uid] != null) el.value = draftMap[uid];
+          el.addEventListener('focus', function(){ activeUserId = uid; typingPauseUntil = Date.now() + 15000; });
+          el.addEventListener('input', function(){
+            draftMap[uid] = el.value;
+            typingPauseUntil = Date.now() + 15000;
+          });
           if(uid === activeUserId){
-            el.focus();
-            try{ const n = el.value.length; el.setSelectionRange(n,n); }catch(e){}
+            try {
+              el.focus();
+              const n = el.value.length;
+              el.setSelectionRange(n, n);
+            } catch(e){}
           }
         });
       }
 
-      function render(threads){
+      function fingerprint(threads){
+        return (threads||[]).map(function(t){
+          const msgs = (t.messages||[]).map(function(m){ return m.from+':'+(m.content||'')+':'+(m.at||''); }).join('|');
+          return t.userId+':'+t.status+':'+msgs;
+        }).join('##');
+      }
+
+      function render(threads, force){
+        const fp = fingerprint(threads);
+        if(!force && fp === lastFingerprint){
+          // only refresh auto-AI timers if needed
+          (threads||[]).forEach(function(t){
+            const card = document.querySelector('.dm-card[data-card="'+t.userId+'"]');
+            if(!card) return;
+            const badge = card.querySelector('.dm-head .badge');
+            if(!badge) return;
+            if(t.autoAiAt && t.status==='waiting_owner'){
+              const left = Math.max(0, Math.floor((t.autoAiAt - Date.now())/1000));
+              badge.className = 'badge off';
+              badge.textContent = 'Auto-AI '+Math.floor(left/60)+'m '+(left%60)+'s';
+            }
+          });
+          return;
+        }
+        lastFingerprint = fp;
         saveScrollState();
         const box = document.getElementById('dm-list');
         if(!threads.length){
@@ -917,6 +961,8 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           flash('Type a message first', true);
           return;
         }
+        sending = true;
+        typingPauseUntil = Date.now() + 20000;
         const buttons = document.querySelectorAll('button[data-uid="'+userId+'"]');
         buttons.forEach(function(b){ b.disabled = true; });
 
@@ -943,13 +989,14 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
             flash(data.message || 'Sent');
             if(ta) ta.value = '';
             draftMap[userId] = '';
-            // stick to bottom after your reply
             scrollMap[userId] = 999999;
+            lastFingerprint = '';
+            await tick(true);
           }
-          await tick();
         } catch(e){
           flash('Network error', true);
         } finally {
+          sending = false;
           buttons.forEach(function(b){ b.disabled = false; });
         }
       }
@@ -962,16 +1009,17 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         });
       }
 
-      async function tick(){
+      async function tick(force){
+        if(!force && (sending || Date.now() < typingPauseUntil || isTyping())) return;
         try{
           const r = await fetch(api, { credentials:'same-origin' });
           if(!r.ok) return;
           const d = await r.json();
-          render(d.threads||[]);
+          render(d.threads||[], !!force);
         }catch(e){}
       }
-      tick();
-      setInterval(tick, 3000);
+      tick(true);
+      setInterval(function(){ tick(false); }, 3000);
       </script>`,
       'dms',
     ),

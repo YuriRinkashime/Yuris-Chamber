@@ -15,6 +15,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { EXPECTED_SCHEMA_VERSION, EXPECTED_SCHEMA_LABEL } from './config/database/schemaVersion.js';
 import { startServer } from './server.js';
 import { loadRuntimeSettings } from './services/runtimeSettings.js';
+import { checkPolls } from './services/pollService.js';
 
 class YurisChamber extends Client {
   constructor() {
@@ -104,6 +105,7 @@ class YurisChamber extends Client {
   setupCronJobs() {
     cron.schedule('0 6 * * *', runSafeTask('birthday_check', () => checkBirthdays(this)));
     cron.schedule('* * * * *', runSafeTask('giveaway_check', () => checkGiveaways(this)));
+    cron.schedule('* * * * *', runSafeTask('poll_check', () => checkPolls(this)));
     // counters feature removed
     // cron.schedule('*/15 * * * *', runSafeTask('counter_update', () => this.updateAllCounters()));
   }
