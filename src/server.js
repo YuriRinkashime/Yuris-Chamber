@@ -113,17 +113,19 @@ function guildSelectHtml(selected) {
 
 function layout(title, body, active = '') {
   const nav = [
-    ['dashboard', 'Overview', path('/dashboard')],
-    ['ai', 'AI', path('/dashboard/ai')],
-    ['commands', 'Commands', path('/dashboard/commands')],
-    ['dms', 'DMs', path('/dashboard/dms')],
-    ['maintenance', 'Maintenance', path('/dashboard/maintenance')],
+    ['dashboard', 'Overview', '◆', path('/dashboard')],
+    ['ai', 'AI', '✦', path('/dashboard/ai')],
+    ['commands', 'Commands', '▣', path('/dashboard/commands')],
+    ['dms', 'DMs', '✉', path('/dashboard/dms')],
+    ['maintenance', 'Maintenance', '⚙', path('/dashboard/maintenance')],
   ]
     .map(
-      ([id, label, href]) =>
-        `<a class="nav-link${active === id ? ' active' : ''}" href="${href}">${label}</a>`,
+      ([id, label, icon, href]) =>
+        `<a class="nav-link${active === id ? ' active' : ''}" href="${href}"><span class="nav-ico">${icon}</span>${label}</a>`,
     )
     .join('');
+
+  const isLogin = active === 'login';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -131,60 +133,264 @@ function layout(title, body, active = '') {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeHtml(title)} · Yuri's Chamber</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --bg:#07060a;--panel:#12101a;--panel2:#1a1625;--border:rgba(212,175,255,.14);
-  --text:#f4f0ff;--muted:#a89bb8;--accent:#c4a1ff;--good:#5ddea0;--bad:#ff6b7a;
-  --glow:rgba(196,161,255,.35);--font:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --bg:#0b0e13;
+  --bg2:#11151c;
+  --panel:#151a22;
+  --panel2:#1a212c;
+  --line:rgba(236,232,225,.12);
+  --text:#ece8e1;
+  --muted:#8b978f;
+  --val:#ff4655;
+  --val2:#0fdda3;
+  --gold:#f0c75e;
+  --chamber-blue:#3d5a80;
+  --chamber-navy:#1b2838;
+  --glow:rgba(255,70,85,.35);
+  --font:'IBM Plex Sans',system-ui,sans-serif;
+  --display:'Rajdhani',system-ui,sans-serif;
 }
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;font-family:var(--font);color:var(--text);
-background:radial-gradient(900px 500px at 10% -5%,rgba(196,161,255,.22),transparent 55%),radial-gradient(700px 400px at 100% 0%,rgba(255,107,157,.12),transparent 50%),var(--bg);background-attachment:fixed}
+html,body{margin:0;height:100%}
+body{
+  font-family:var(--font);color:var(--text);background:var(--bg);
+  ${isLogin ? 'overflow:hidden;height:100vh;' : 'min-height:100vh;'}
+}
+/* Valorant-ish geometric backdrop (no external images required) */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 70% 50% at 80% -10%,rgba(255,70,85,.18),transparent 55%),
+    radial-gradient(ellipse 50% 40% at -10% 80%,rgba(15,221,163,.08),transparent 50%),
+    linear-gradient(135deg,transparent 40%,rgba(255,70,85,.03) 40%,rgba(255,70,85,.03) 41%,transparent 41%),
+    repeating-linear-gradient(-18deg,transparent,transparent 80px,rgba(236,232,225,.02) 80px,rgba(236,232,225,.02) 81px),
+    var(--bg);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,70,85,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,70,85,.04) 1px,transparent 1px);
+  background-size:48px 48px;opacity:.4;
+  mask-image:radial-gradient(ellipse at center,black 20%,transparent 75%);
+}
 a{color:inherit;text-decoration:none}
-.shell{max-width:720px;margin:0 auto;padding:24px 16px 56px}
-.hero{display:flex;align-items:center;gap:14px;margin-bottom:18px}
-.avatar{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#2a2038,var(--panel2));border:1px solid var(--border);box-shadow:0 0 24px var(--glow);display:grid;place-items:center;font-size:22px}
-.brand{font-size:20px;font-weight:700}.brand span{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:2px}
-.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.nav{display:flex;gap:6px;flex-wrap:wrap}
-.nav-link{padding:8px 14px;border-radius:999px;font-size:13px;font-weight:500;color:var(--muted);border:1px solid transparent}
-.nav-link:hover{color:var(--text);border-color:var(--border)}
-.nav-link.active{color:#120818;background:linear-gradient(135deg,var(--accent),#e0c4ff);font-weight:600}
-.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:12px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
-h1{margin:0 0 14px;font-size:22px}h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-label{display:block;margin:12px 0 6px;font-size:13px;color:var(--muted)}
-input[type=text],input[type=password],textarea,select{width:100%;padding:12px 14px;border-radius:12px;font:inherit;font-size:15px;color:var(--text);background:rgba(0,0,0,.35);border:1px solid var(--border);outline:none}
-textarea{min-height:120px;resize:vertical}
-.btn{display:inline-flex;align-items:center;gap:6px;border:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;padding:10px 16px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#a78bfa);color:#120818}
-.btn.secondary{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border)}
-.btn.danger{background:linear-gradient(135deg,#ff6b7a,#c23a4a);color:#fff}
-.btn.good{background:linear-gradient(135deg,#5ddea0,#2a9d6a);color:#04140c}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
-.muted{color:var(--muted);font-size:13px;line-height:1.4}.err{color:var(--bad)}.ok{color:var(--good)}
-.stat{font-size:20px;font-weight:700}
-.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
-.badge.on{background:rgba(93,222,160,.15);color:var(--good)}
-.badge.off{background:rgba(255,107,122,.15);color:var(--bad)}
-.grid{display:grid;gap:12px}@media(min-width:640px){.grid-2{grid-template-columns:1fr 1fr}}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:10px 6px;border-bottom:1px solid var(--border);text-align:left}
-th{color:var(--muted);font-size:11px;text-transform:uppercase}
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.login-card{width:min(400px,100%)}.login-card .avatar{margin:0 auto 12px}.login-card .brand{text-align:center;margin-bottom:18px}
-input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px}
+${isLogin ? '.shell{max-width:100%;height:100vh;padding:0;display:flex;flex-direction:column}' : ''}
+
+.hero{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.avatar{
+  width:52px;height:52px;border-radius:4px;
+  background:linear-gradient(145deg,#2a1014,var(--panel2));
+  border:1px solid rgba(255,70,85,.35);
+  box-shadow:0 0 20px var(--glow);
+  display:grid;place-items:center;font-size:18px;color:var(--val);
+  clip-path:polygon(0 0,100% 0,100% 70%,85% 100%,0 100%);
+}
+.brand{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.brand span{display:block;font-family:var(--font);font-size:11px;font-weight:500;color:var(--muted);margin-top:4px;letter-spacing:.14em}
+
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.nav{
+  display:flex;gap:4px;flex-wrap:wrap;padding:4px;
+  background:rgba(0,0,0,.35);border:1px solid var(--line);
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+}
+.nav-link{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:10px 14px;font-family:var(--display);font-size:14px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  transition:color .15s,background .15s;
+}
+.nav-link:hover{color:var(--text);background:rgba(255,70,85,.08)}
+.nav-link.active{color:#fff;background:var(--val);box-shadow:0 0 16px var(--glow)}
+.nav-ico{font-size:11px;opacity:.9}
+
+.card{
+  background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);padding:18px;margin-bottom:12px;
+  clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px));
+  box-shadow:0 12px 40px rgba(0,0,0,.45);
+}
+h1{margin:0 0 14px;font-family:var(--display);font-size:28px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+h2{margin:0 0 10px;font-family:var(--display);font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--val2);font-weight:600}
+p{color:var(--muted);line-height:1.5;font-size:14px;margin:0 0 8px}
+.ok{color:var(--val2)!important}.err{color:var(--val)!important}
+
+label{display:block;font-size:11px;color:var(--muted);margin:12px 0 6px;font-family:var(--display);letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+input[type=text],input[type=password],textarea,select{
+  width:100%;padding:12px 14px;border:1px solid var(--line);
+  background:rgba(0,0,0,.4);color:var(--text);font:inherit;outline:none;
+  border-radius:2px;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--val);box-shadow:0 0 0 2px rgba(255,70,85,.2)}
+textarea{min-height:200px;resize:vertical;line-height:1.5}
+
+/* slim Valorant-style scrollbars */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,70,85,.5) rgba(0,0,0,.3)}
+*::-webkit-scrollbar{width:6px;height:6px}
+*::-webkit-scrollbar-track{background:rgba(0,0,0,.3)}
+*::-webkit-scrollbar-thumb{background:rgba(255,70,85,.55);border-radius:2px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(255,70,85,.85)}
+
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:11px 20px;border:none;cursor:pointer;
+  font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--val);color:#fff;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+  transition:filter .15s,transform .15s;
+}
+.btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.btn.secondary{background:transparent;color:var(--text);border:1px solid var(--line);clip-path:none;border-radius:2px}
+.btn.good{background:var(--val2);color:#041510}
+.btn.danger{background:#b8323e}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat{padding:14px;background:rgba(0,0,0,.35);border:1px solid var(--line)}
+.stat .v{font-family:var(--display);font-size:24px;font-weight:700;color:var(--val)}
+.stat .k{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
+
+#live-logs,pre.logs{
+  max-height:240px;overflow:auto;padding:12px;margin:0;
+  background:rgba(0,0,0,.5);border:1px solid var(--line);
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;color:#b8c4bc;
+  white-space:pre-wrap;word-break:break-word;
+}
+
+/* command toggles */
+.cmd-list{display:flex;flex-direction:column;gap:8px}
+.cmd-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 14px;background:rgba(0,0,0,.3);border:1px solid var(--line);
+}
+.cmd-row .name{font-family:var(--display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:15px}
+.cmd-row .meta{font-size:11px;color:var(--muted)}
+.cmd-row.on{border-left:3px solid var(--val2)}
+.cmd-row.off{border-left:3px solid var(--val);opacity:.75}
+.switch{
+  position:relative;width:48px;height:26px;flex-shrink:0;
+}
+.switch input{opacity:0;width:0;height:0}
+.switch .slider{
+  position:absolute;cursor:pointer;inset:0;background:#333;transition:.2s;border-radius:2px;
+}
+.switch .slider:before{
+  position:absolute;content:"";height:18px;width:18px;left:4px;bottom:4px;
+  background:#fff;transition:.2s;border-radius:2px;
+}
+.switch input:checked + .slider{background:var(--val2)}
+.switch input:checked + .slider:before{transform:translateX(20px)}
+.switch input:not(:checked) + .slider{background:var(--val)}
+
+.banner{
+  height:100px;margin-bottom:14px;border:1px solid var(--line);
+  background:
+    linear-gradient(90deg,rgba(11,14,19,.92),rgba(11,14,19,.4)),
+    linear-gradient(135deg,#1a0a0c 0%,#0b0e13 45%,#1b2838 100%);
+  position:relative;overflow:hidden;
+  clip-path:polygon(0 0,calc(100% - 20px) 0,100% 20px,100% 100%,0 100%);
+}
+.banner::before{
+  content:"";position:absolute;right:-20px;top:-20px;width:160px;height:160px;
+  border:2px solid rgba(255,70,85,.25);transform:rotate(18deg);
+}
+.banner .cap{
+  position:absolute;left:18px;bottom:14px;
+  font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text);
+}
+.banner .cap small{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:2px;letter-spacing:.16em}
+
+/* login — no page scroll */
+.login-screen{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  padding:16px;min-height:0;overflow:hidden;
+}
+.login-card{
+  width:min(380px,100%);padding:28px 24px;
+  background:var(--panel);border:1px solid rgba(255,70,85,.25);
+  box-shadow:0 0 40px rgba(255,70,85,.12),0 20px 50px rgba(0,0,0,.5);
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
+}
+.login-card .avatar{margin:0 auto 12px}
+.login-card .brand{text-align:center;margin-bottom:18px}
+
+.credits{
+  margin-top:28px;padding:16px;border:1px solid var(--line);
+  background:rgba(0,0,0,.25);font-size:12px;color:var(--muted);
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%);
+}
+.credits strong{color:var(--text);font-family:var(--display);letter-spacing:.08em;text-transform:uppercase}
+.credits a{color:var(--val2);text-decoration:underline}
+
+.footer-note{text-align:center;margin-top:20px;font-size:10px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;opacity:.65}
+
+.toggle-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+.toggle-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--val)}
+
+.flash{padding:10px 12px;margin-bottom:10px;border:1px solid var(--line);font-size:13px}
+.flash.ok{border-color:rgba(15,221,163,.4);color:var(--val2)}
+.flash.err{border-color:rgba(255,70,85,.4);color:var(--val)}
+
+@media (max-width:640px){
+  .brand{font-size:20px}
+  h1{font-size:22px}
+  .nav-link{padding:8px 10px;font-size:12px}
+}
+
+.muted{color:var(--muted)!important;font-size:13px}
+.badge{display:inline-block;padding:3px 8px;font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.badge.on{background:rgba(15,221,163,.15);color:var(--val2);border:1px solid rgba(15,221,163,.35)}
+.badge.off{background:rgba(255,70,85,.12);color:var(--val);border:1px solid rgba(255,70,85,.35)}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.switch-form{margin:0}
+.intel{list-style:none;margin:0;padding:0}
+.intel li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.intel li:last-child{border-bottom:none}
+.intel .dot{width:8px;height:8px;margin-top:5px;flex-shrink:0;background:var(--val);box-shadow:0 0 8px var(--glow)}
+.logs,#live-logs,.dm-thread,textarea{
+  scrollbar-width:thin!important;
+  scrollbar-color:rgba(255,70,85,.55) rgba(0,0,0,.3)!important;
+}
+.logs::-webkit-scrollbar,#live-logs::-webkit-scrollbar,.dm-thread::-webkit-scrollbar,textarea::-webkit-scrollbar{width:6px!important;height:6px!important}
+.logs::-webkit-scrollbar-thumb,#live-logs::-webkit-scrollbar-thumb,.dm-thread::-webkit-scrollbar-thumb,textarea::-webkit-scrollbar-thumb{
+  background:rgba(255,70,85,.55)!important;border-radius:2px!important;
+}
+.logs::-webkit-scrollbar-track,#live-logs::-webkit-scrollbar-track,.dm-thread::-webkit-scrollbar-track,textarea::-webkit-scrollbar-track{
+  background:rgba(0,0,0,.3)!important;
+}
 </style>
 </head>
-<body>
+<body class="${isLogin ? 'is-login' : ''}">
 ${
-  active
-    ? `<div class="shell">
-  <div class="hero"><div class="avatar">◈</div><div class="brand">Yuri's Chamber<span>BANORANT control panel</span></div></div>
-  <div class="top"><nav class="nav">${nav}</nav>
-  <form method="POST" action="${path('/logout')}" style="margin:0"><button class="btn secondary" type="submit">Log out</button></form></div>
-  ${body}</div>`
-    : `<div class="login-wrap"><div class="card login-card"><div class="avatar">◈</div><div class="brand">Yuri's Chamber<span>Dashboard login</span></div>${body}</div></div>`
+  isLogin
+    ? `<div class="shell"><div class="login-screen"><div class="login-card">
+        <div class="avatar">◆</div>
+        <div class="brand">Yuri's Chamber<span>Enter the chamber</span></div>
+        ${body}
+       </div></div></div>`
+    : `<div class="shell">
+        <div class="hero"><div class="avatar">◆</div><div class="brand">Yuri's Chamber<span>BANORANT CAFE · control panel</span></div></div>
+        <div class="top"><nav class="nav">${nav}</nav>
+          <form method="POST" action="${path('/logout')}" style="margin:0"><button class="btn secondary" type="submit">Log out</button></form>
+        </div>
+        ${body}
+        <div class="credits">
+          <strong>Credits</strong><br/>
+          Bot &amp; dashboard: <strong>RinkaYuri</strong> · BANORANT CAFE 🎮<br/>
+          Runtime: Yuri's Chamber · Built for Filipino Valorant community<br/>
+          Design inspired by VALORANT chamber aesthetics · Not affiliated with Riot Games
+        </div>
+        <p class="footer-note">Owner access only · sealed chamber</p>
+      </div>`
 }
-</body></html>`;
+</body>
+</html>`;
 }
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
@@ -210,6 +416,14 @@ app.get(path('/api/live'), requireAuth, async (req, res) => {
   try {
     saved = await discordClient?.db?.get('bot:presence', null);
   } catch (_) {}
+  let dbMode = 'unknown';
+  try {
+    if (!discordClient?.db) dbMode = 'offline';
+    else if (typeof discordClient.db.isDegraded === 'function' && discordClient.db.isDegraded()) dbMode = 'degraded';
+    else if (typeof discordClient.db.isAvailable === 'function' && discordClient.db.isAvailable()) dbMode = 'firebase';
+    else dbMode = 'connected';
+  } catch (_) { dbMode = 'error'; }
+
   res.json({
     ok: true,
     bot: {
@@ -221,6 +435,7 @@ app.get(path('/api/live'), requireAuth, async (req, res) => {
       uptime: formatUptime(Date.now() - getBotStartedAt()),
       maintenance: isMaintenanceModeRuntime(),
       presence: presenceText || saved?.text || '',
+      db: dbMode,
     },
     logs: getLogs(40),
   });
@@ -261,7 +476,7 @@ app.get(path('/login'), (req, res) => {
         <input type="password" name="password" required autocomplete="current-password"/>
         <div class="row"><button class="btn" type="submit">Log in</button></div>
       </form>`,
-      '',
+      'login',
     ),
   );
 });
@@ -301,41 +516,37 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
     layout(
       'Overview',
       `<h1>Overview</h1>
+      <div class="banner"><div class="cap">Status of the chamber<small>Live bot telemetry · 3s refresh</small></div></div>
       <div class="grid grid-2">
         <div class="card">
           <h2>Live status</h2>
           <p class="stat" id="live-tag">…</p>
-          <p class="muted">Uptime <strong id="live-uptime">—</strong></p>
-          <p class="muted">Ping <strong id="live-ping">—</strong> ms · Guilds <strong id="live-guilds">—</strong></p>
-          <p class="muted">Commands <strong id="live-cmds">—</strong></p>
-          <p class="muted">Presence <strong id="live-presence">—</strong></p>
-          <p>Maintenance <span id="live-maint" class="badge">—</span></p>
+          <div class="stat-grid" style="margin-top:12px">
+            <div class="stat"><div class="v" id="live-uptime">—</div><div class="k">Uptime</div></div>
+            <div class="stat"><div class="v" id="live-ping">—</div><div class="k">Ping ms</div></div>
+            <div class="stat"><div class="v" id="live-guilds">—</div><div class="k">Guilds</div></div>
+            <div class="stat"><div class="v" id="live-cmds">—</div><div class="k">Commands</div></div>
+          </div>
+          <p class="muted" style="margin-top:12px">Presence <strong id="live-presence">—</strong></p>
+          <p>Maintenance <span id="live-maint" class="badge">—</span>
+             · Database <span id="live-db" class="badge on">—</span></p>
         </div>
         <div class="card">
-          <h2>Quick links</h2>
-          <div class="row">
-            <a class="btn" href="${path('/dashboard/ai')}">AI</a>
-            <a class="btn secondary" href="${path('/dashboard/commands')}">Commands</a>
-            <a class="btn secondary" href="${path('/dashboard/dms')}">DMs</a>
-            <a class="btn secondary" href="${path('/dashboard/maintenance')}">Maintenance</a>
-          </div>
-          <p class="muted" style="margin-top:12px">Auto-refreshes every 3s</p>
+          <h2>Chamber intel</h2>
+          <p style="margin:0 0 10px;color:var(--text)">Operator notes for <strong>BANORANT CAFE</strong>.</p>
+          <ul class="intel">
+            <li><span class="dot"></span> Firebase stores levels, welcome, AI prefs, and DMs</li>
+            <li><span class="dot"></span> /setlevel posts in level-up with “modified by Yuri”</li>
+            <li><span class="dot"></span> AI persona is edited under the AI tab (up to 12k chars)</li>
+            <li><span class="dot"></span> Maintenance blocks commands for everyone, including owner</li>
+            <li><span class="dot"></span> Use the top nav to move pages — this panel is status only</li>
+          </ul>
+          <p class="muted" style="margin-top:12px">Look inspired by VALORANT agent <strong style="color:var(--text)">Chamber</strong> · not affiliated with Riot Games</p>
         </div>
       </div>
-            <div class="card">
+      <div class="card">
         <h2>Recent logs</h2>
-        <style>
-          #live-logs{
-            margin:0;max-height:280px;overflow:auto;font-size:12px;line-height:1.4;
-            white-space:pre-wrap;color:var(--muted);padding-right:4px;
-            scrollbar-width:thin;scrollbar-color:rgba(196,161,255,.35) transparent;
-          }
-          #live-logs::-webkit-scrollbar{width:6px}
-          #live-logs::-webkit-scrollbar-track{background:transparent}
-          #live-logs::-webkit-scrollbar-thumb{background:rgba(196,161,255,.35);border-radius:99px}
-          #live-logs::-webkit-scrollbar-thumb:hover{background:rgba(196,161,255,.55)}
-        </style>
-        <pre id="live-logs"></pre>
+        <pre id="live-logs" class="logs"></pre>
       </div>
       <script>
       const base = ${JSON.stringify(path('/api/live'))};
@@ -354,6 +565,11 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           const m = document.getElementById('live-maint');
           m.textContent = b.maintenance ? 'ON' : 'OFF';
           m.className = 'badge ' + (b.maintenance ? 'off' : 'on');
+          const db = document.getElementById('live-db');
+          if (db) {
+            db.textContent = (b.db || '—').toUpperCase();
+            db.className = 'badge ' + (b.db === 'firebase' || b.db === 'connected' ? 'on' : 'off');
+          }
           document.getElementById('live-logs').textContent = (d.logs || []).map(function(l) {
             return '[' + new Date(l.t).toLocaleTimeString() + '] ' + l.level + ': ' + l.message;
           }).join('\\n') || 'No logs yet';
@@ -377,16 +593,50 @@ app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
     layout(
       'AI',
       `<h1>AI settings</h1>${saved}
+      <div class="banner"><div class="cap">Mind of Yuri<small>Persona · model · chamber brain</small></div></div>
       <div class="card">
-        <form method="POST" action="${path('/dashboard/ai')}">
-          <label class="row"><input type="checkbox" name="enabled" value="1" ${config.enabled ? 'checked' : ''}/> Enabled</label>
+        <h2>Persona core</h2>
+        <p>Shapes every /prompt and DM reply. Max 12,000 characters. Saving stays on this page.</p>
+        <form id="ai-form" method="POST" action="${path('/dashboard/ai')}">
+          <div class="toggle-row">
+            <input type="checkbox" name="enabled" value="1" ${config.enabled ? 'checked' : ''}/>
+            <span style="font-size:13px">AI enabled</span>
+          </div>
           <label>Custom instructions</label>
-          <textarea name="systemInstructions" maxlength="4000">${escapeHtml(config.systemInstructions)}</textarea>
+          <textarea name="systemInstructions" maxlength="12000" placeholder="Paste your full Yuri persona here…">${escapeHtml(config.systemInstructions)}</textarea>
           <label>Model</label>
           <input type="text" name="model" value="${escapeHtml(config.model)}"/>
-          <div class="row"><button class="btn" type="submit">Save</button></div>
+          <div class="row">
+            <button class="btn" type="submit" id="ai-save">Save</button>
+            <span id="ai-status" class="meta" style="font-size:12px;color:var(--muted)"></span>
+          </div>
         </form>
-      </div>`,
+      </div>
+      <script>
+      (function(){
+        var form = document.getElementById('ai-form');
+        if(!form) return;
+        form.addEventListener('submit', function(e){
+          e.preventDefault();
+          var btn = document.getElementById('ai-save');
+          var st = document.getElementById('ai-status');
+          btn.disabled = true; st.textContent = 'Saving…';
+          var body = new URLSearchParams(new FormData(form));
+          fetch(form.action, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+          }).then(function(r){ return r.json().catch(function(){ return { ok: r.ok }; }); })
+            .then(function(d){
+              st.textContent = d.ok !== false ? 'Saved ✓' : (d.error || 'Failed');
+              st.style.color = d.ok !== false ? 'var(--val2)' : 'var(--val)';
+            })
+            .catch(function(){ st.textContent = 'Network error'; st.style.color = 'var(--val)'; })
+            .finally(function(){ btn.disabled = false; });
+        });
+      })();
+      </script>`,
       'ai',
     ),
   );
@@ -394,12 +644,21 @@ app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
 
 app.post(path('/dashboard/ai'), requireAuth, async (req, res) => {
   const guildId = getSessionGuildId(req);
-  await saveAiConfig(discordClient, guildId, {
-    enabled: req.body.enabled === '1',
-    systemInstructions: String(req.body.systemInstructions || '').slice(0, 4000),
-    model: String(req.body.model || 'llama-3.3-70b-instruct:free').slice(0, 120),
-  });
-  res.redirect(path('/dashboard/ai') + '?saved=1');
+  try {
+    await saveAiConfig(discordClient, guildId, {
+      enabled: req.body.enabled === '1',
+      systemInstructions: String(req.body.systemInstructions || '').slice(0, 12000),
+      model: String(req.body.model || 'llama-3.3-70b-instruct:free').slice(0, 120),
+    });
+    const wantsJson = (req.headers.accept || '').includes('application/json');
+    if (wantsJson) return res.json({ ok: true, message: 'Saved' });
+    res.redirect(path('/dashboard/ai') + '?saved=1');
+  } catch (e) {
+    if ((req.headers.accept || '').includes('application/json')) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+    res.redirect(path('/dashboard/ai') + '?err=1');
+  }
 });
 
 app.get(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
@@ -412,6 +671,7 @@ app.get(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
     layout(
       'Maintenance',
       `<h1>Maintenance</h1>${saved}
+      <div class="banner"><div class="cap">Sealed doors<small>Offline / maintenance mode</small></div></div>
       <div class="card">
         <form method="POST" action="${path('/dashboard/maintenance')}">
           <label class="row"><input type="checkbox" name="maintenanceMode" value="1" ${on ? 'checked' : ''}/> Maintenance mode</label>
@@ -444,16 +704,18 @@ app.get(path('/dashboard/commands'), requireAuth, async (req, res) => {
   const config = await getGuildConfig(discordClient, guildId);
   const snap = getCommandAccessSnapshot(discordClient, config);
   const flash = req.query.ok
-    ? `<p class="ok">${escapeHtml(req.query.ok)}</p>`
+    ? `<div class="flash ok">${escapeHtml(String(req.query.ok))}</div>`
     : req.query.err
-      ? `<p class="err">${escapeHtml(req.query.err)}</p>`
+      ? `<div class="flash err">${escapeHtml(String(req.query.err))}</div>`
       : '';
+
   const switcher = `<div class="card"><h2>Server</h2>
     <form method="POST" action="${path('/dashboard/guild')}" class="row">
       <select name="guildId" style="flex:1">${guildSelectHtml(guildId)}</select>
       <button class="btn secondary" type="submit">Switch</button>
     </form></div>`;
-  let tables = '';
+
+  let sections = '';
   for (const cat of snap.categories || []) {
     const rows = (cat.commands || [])
       .filter((c) => !c.isSubcommand)
@@ -461,23 +723,37 @@ app.get(path('/dashboard/commands'), requireAuth, async (req, res) => {
         const enabled = !snap.disabledCommands?.[c.name.toLowerCase()];
         const protectedCmd = c.protected || isProtectedCommand(c.name);
         const toggle = protectedCmd
-          ? '<span class="muted">protected</span>'
-          : `<form method="POST" action="${path('/dashboard/commands/toggle')}" style="margin:0">
+          ? '<span class="meta">protected</span>'
+          : `<form method="POST" action="${path('/dashboard/commands/toggle')}" class="switch-form">
               <input type="hidden" name="command" value="${escapeHtml(c.name)}"/>
               <input type="hidden" name="enable" value="${enabled ? '0' : '1'}"/>
-              <button class="btn ${enabled ? 'danger' : 'good'}" type="submit" style="padding:4px 10px;font-size:12px">${enabled ? 'Off' : 'On'}</button>
+              <label class="switch" title="${enabled ? 'Click to disable' : 'Click to enable'}">
+                <input type="checkbox" ${enabled ? 'checked' : ''} onchange="this.form.submit()"/>
+                <span class="slider"></span>
+              </label>
             </form>`;
-        return `<tr><td><code>${escapeHtml(c.name)}</code></td>
-          <td class="muted">${escapeHtml(c.description || '').slice(0, 60)}</td>
-          <td>${enabled ? '<span class="badge on">ON</span>' : '<span class="badge off">OFF</span>'}</td>
-          <td>${toggle}</td></tr>`;
+        return `<div class="cmd-row ${enabled ? 'on' : 'off'}">
+          <div>
+            <div class="name">/${escapeHtml(c.name)}</div>
+            <div class="meta">${escapeHtml((c.description || '').slice(0, 80))}</div>
+          </div>
+          ${toggle}
+        </div>`;
       })
       .join('');
-    tables += `<div class="card"><h2>${escapeHtml(cat.displayName || 'Category')}</h2>
-      <table><thead><tr><th>Cmd</th><th>Desc</th><th>State</th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="4" class="muted">None</td></tr>'}</tbody></table></div>`;
+    if (!rows) continue;
+    sections += `<div class="card"><h2>${escapeHtml(cat.label || cat.key || 'Commands')}</h2><div class="cmd-list">${rows}</div></div>`;
   }
-  res.send(layout('Commands', `<h1>Commands</h1>${flash}${switcher}${tables}`, 'commands'));
+
+  res.send(
+    layout(
+      'Commands',
+      `<h1>Commands</h1>
+      <div class="banner"><div class="cap">Arsenal control<small>Toggle slash commands per server</small></div></div>
+      ${flash}${switcher}${sections || '<div class="card"><p>No commands loaded.</p></div>'}`,
+      'commands',
+    ),
+  );
 });
 
 app.post(path('/dashboard/commands/toggle'), requireAuth, async (req, res) => {
@@ -509,14 +785,11 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           display:flex;flex-direction:column;gap:8px;
           max-height:280px;overflow:auto;padding:6px 4px 8px 2px;
         }
-        .dm-thread{scrollbar-width:thin;scrollbar-color:rgba(196,161,255,.35) transparent}
-        .dm-thread::-webkit-scrollbar{width:6px}
-        .dm-thread::-webkit-scrollbar-track{background:transparent}
-        .dm-thread::-webkit-scrollbar-thumb{background:rgba(196,161,255,.35);border-radius:99px}
-        .dm-thread::-webkit-scrollbar-thumb:hover{background:rgba(196,161,255,.55)}
+        .dm-thread{scrollbar-width:thin;scrollbar-color:rgba(255,70,85,.55) rgba(0,0,0,.3);border-radius:99px}
+        .dm-thread::-webkit-scrollbar-thumb:hover{background:rgba(255,70,85,.75)}
         .bubble{max-width:92%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.4;word-break:break-word}
         .bubble.user{align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid var(--border)}
-        .bubble.owner{align-self:flex-end;background:rgba(196,161,255,.18);border:1px solid rgba(196,161,255,.35)}
+        .bubble.owner{align-self:flex-end;background:rgba(255,70,85,.55);border:1px solid rgba(255,70,85,.35)}
         .bubble.ai{align-self:flex-end;background:rgba(93,222,160,.12);border:1px solid rgba(93,222,160,.3)}
         .bubble .who{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600}
         .dm-actions textarea{min-height:72px}

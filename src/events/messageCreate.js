@@ -57,33 +57,52 @@ export default {
 
       if (!message.guild) return;
 
-            // Reply to Yuri AI message → continue chat (no /prompt needed)
+            // AI: reply-to-bot OR @mention the bot → answer with AI
       try {
-        if (message.reference?.messageId && message.content?.trim()) {
-          const ref = await message.channel.messages
-            .fetch(message.reference.messageId)
-            .catch(() => null);
+        const contentTrim = message.content?.trim() || '';
+        if (contentTrim) {
+          let triggered = false;
 
-          const isBotRef = ref && ref.author?.id === client.user.id;
-          const looksLikeAi =
-            isBotRef &&
-            (ref.content?.includes('asked:') || (ref.content?.length || 0) > 20);
+          // 1) User replied to any message from this bot
+          if (message.reference?.messageId) {
+            const ref = await message.channel.messages
+              .fetch(message.reference.messageId)
+              .catch(() => null);
+            if (ref && ref.author?.id === client.user.id) {
+              triggered = true;
+            }
+          }
 
-          if (looksLikeAi) {
+          // 2) User @mentioned the bot
+          if (
+            message.mentions?.users?.has(client.user.id) ||
+            message.mentions?.repliedUser?.id === client.user.id
+          ) {
+            triggered = true;
+          }
+
+          if (triggered) {
             const {
               getAiConfig,
               generateReply,
               getUserAiHistory,
               saveUserAiHistory,
               buildSystemInstructions,
-              saveUserAiPrefs } = await import('../services/aiService.js');
+              saveUserAiPrefs,
+            } = await import('../services/aiService.js');
 
             const guildId = message.guild.id;
             const userId = message.author.id;
             const config = await getAiConfig(client, guildId);
 
             if (config.enabled) {
-              const userMessage = message.content.trim().slice(0, 1500);
+              // Strip bot mention from text so the model doesn't see raw <@botid>
+              let userMessage = contentTrim
+                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+                .trim()
+                .slice(0, 1500);
+              if (!userMessage) userMessage = 'hey';
+
               const lower = userMessage.toLowerCase();
 
               if (/\b(bisaya|cebuano)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
@@ -97,10 +116,32 @@ export default {
               }
               if (/\b(personal(ize)?|custom(ize)?|be my ai)\b/i.test(lower)) {
                 await saveUserAiPrefs(client, guildId, userId, {
-                  customStyle: userMessage.slice(0, 800) });
+                  customStyle: userMessage.slice(0, 800),
+                });
               }
               if (/\b(reset (style|personality|ai)|default yuri)\b/i.test(lower)) {
                 await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
+              }
+
+              // Optional: "reply in #channel" / "message me in #channel"
+              let targetChannel = message.channel;
+              const chMention = userMessage.match(/<#(\d{17,20})>/);
+              const wantsOtherChannel =
+                /\b(reply (me )?(in|at|on)|answer (me )?(in|at|on)|talk (to me )?(in|at|on)|message me (in|at|on)|go to)\b/i.test(
+                  lower,
+                ) && chMention;
+
+              if (wantsOtherChannel) {
+                const dest = await message.guild.channels
+                  .fetch(chMention[1])
+                  .catch(() => null);
+                if (dest?.isTextBased?.()) {
+                  const me = message.guild.members.me;
+                  const perms = dest.permissionsFor(me);
+                  if (perms?.has(['ViewChannel', 'SendMessages'])) {
+                    targetChannel = dest;
+                  }
+                }
               }
 
               const history = await getUserAiHistory(client, guildId, userId);
@@ -111,18 +152,29 @@ export default {
                 config.systemInstructions,
               );
               systemInstructions +=
-                `\n\nCurrent speaker Discord ID: ${userId}. To mention them write <@${userId}>. Never write USER_ID as a placeholder.`;
+                `\n\nCurrent speaker: ${message.author.username} (ID ${userId}). ` +
+                `They are chatting in #${message.channel.name}. ` +
+                `To mention them write <@${userId}>. Never write USER_ID as a placeholder. ` +
+                `Reply naturally — more than one word when it fits. Avoid only saying "got it".`;
+
+              if (targetChannel.id !== message.channel.id) {
+                systemInstructions +=
+                  `\nThey asked you to continue in #${targetChannel.name}. Answer their question fully; the bot will post there.`;
+              }
 
               let answer = await generateReply({
                 systemInstructions,
                 userMessage,
                 model: config.model,
-                history });
-              answer = String(answer)
+                history,
+              });
+
+              answer = String(answer || '')
                 .replace(/<@USER_ID>/gi, `<@${userId}>`)
                 .replace(/@USER_ID\b/gi, `<@${userId}>`)
                 .replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`);
               if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
+              if (!answer.trim()) answer = 'yo, say that again?';
 
               await saveUserAiHistory(client, guildId, userId, [
                 ...history,
@@ -130,15 +182,41 @@ export default {
                 { role: 'model', parts: [{ text: answer }] },
               ]);
 
-              await message.reply({
-                content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`),
-                allowedMentions: { users: [...String(answer).matchAll(/<@!?(\d{17,20})>/g)].map(m => m[1]) } }).catch(() => {});
+              const mentionIds = [
+                ...answer.matchAll(/<@!?(\d{17,20})>/g),
+              ].map((m) => m[1]);
+
+              const payload = {
+                content: answer,
+                allowedMentions: {
+                  users: mentionIds.length ? mentionIds : [],
+                },
+              };
+
+              if (targetChannel.id === message.channel.id) {
+                await message.reply(payload).catch(() =>
+                  targetChannel.send(payload).catch(() => {}),
+                );
+              } else {
+                await targetChannel
+                  .send({
+                    content: `${answer}`,
+                    allowedMentions: payload.allowedMentions,
+                  })
+                  .catch(() => {});
+                await message
+                  .reply({
+                    content: `sent in ${targetChannel}`,
+                    allowedMentions: { parse: [] },
+                  })
+                  .catch(() => {});
+              }
               return;
             }
           }
         }
       } catch (err) {
-        logger.debug('AI reply-continue failed:', err?.message);
+        logger.debug('AI chat trigger failed:', err?.message);
       }
 
       // Channel locks (stored in Firebase via client.db)
