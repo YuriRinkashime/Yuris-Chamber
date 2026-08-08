@@ -104,34 +104,13 @@ class YurisChamber extends Client {
   setupCronJobs() {
     cron.schedule('0 6 * * *', runSafeTask('birthday_check', () => checkBirthdays(this)));
     cron.schedule('* * * * *', runSafeTask('giveaway_check', () => checkGiveaways(this)));
-    cron.schedule('*/15 * * * *', runSafeTask('counter_update', () => this.updateAllCounters()));
+    // counters feature removed
+    // cron.schedule('*/15 * * * *', runSafeTask('counter_update', () => this.updateAllCounters()));
   }
 
   async updateAllCounters() {
-    if (!this.db) return;
-    
-    for (const [guildId, guild] of this.guilds.cache) {
-      try {
-        const validCounters = [];
-        const orphanedCounters = [];
-        
-        for (const counter of counters) {
-          if (counter && counter.type && counter.channelId && counter.enabled !== false) {
-            const channel = guild.channels.cache.get(counter.channelId);
-            if (channel) {
-              validCounters.push(counter);
-            } else {
-              orphanedCounters.push(counter);
-            }
-          }
-        }
-        
-        if (orphanedCounters.length > 0) {
-        }
-      } catch (error) {
-        logger.error(`Error updating counters for guild ${guildId}:`, error);
-      }
-    }
+    // Server counters feature removed — no-op so cron does not spam errors
+    return;
   }
 
   async loadHandlers() {

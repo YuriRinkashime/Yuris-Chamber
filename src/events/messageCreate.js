@@ -104,18 +104,24 @@ export default {
               }
 
               const history = await getUserAiHistory(client, guildId, userId);
-              const systemInstructions = await buildSystemInstructions(
+              let systemInstructions = await buildSystemInstructions(
                 client,
                 guildId,
                 userId,
                 config.systemInstructions,
               );
+              systemInstructions +=
+                `\n\nCurrent speaker Discord ID: ${userId}. To mention them write <@${userId}>. Never write USER_ID as a placeholder.`;
 
               let answer = await generateReply({
                 systemInstructions,
                 userMessage,
                 model: config.model,
                 history });
+              answer = String(answer)
+                .replace(/<@USER_ID>/gi, `<@${userId}>`)
+                .replace(/@USER_ID\b/gi, `<@${userId}>`)
+                .replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`);
               if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
 
               await saveUserAiHistory(client, guildId, userId, [
@@ -126,7 +132,7 @@ export default {
 
               await message.reply({
                 content: answer.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`),
-                allowedMentions: { parse: ['users', 'roles'] } }).catch(() => {});
+                allowedMentions: { users: [...String(answer).matchAll(/<@!?(\d{17,20})>/g)].map(m => m[1]) } }).catch(() => {});
               return;
             }
           }

@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_INSTRUCTIONS =
-  "You are Yuri, the AI for BANORANT PH — a Filipino Valorant Discord. Be helpful, casual, Gen Z energy, use light slang and emojis when it fits.";
+  "You are Yuri, the AI for BANORANT CAFE 🎮 — a Filipino Valorant Discord. Chill, nonchalant, short replies. Light slang ok. Sparse emojis. Never write the placeholder text USER_ID.";
 
 const HISTORY_LIMIT = 12;
 
@@ -241,7 +241,7 @@ export async function generateDmReply(client, userId, userMessage) {
     guildId,
     userId,
     (config.systemInstructions || DEFAULT_INSTRUCTIONS) +
-      `\n\nYou are in a private DM as Yuri for BANORANT PH.` +
+      `\n\nYou are in a private DM as Yuri for BANORANT CAFE.` +
       `\n${serverCtx}` +
       `\nUse the conversation history. Do not re-ask language preference if already set.` +
       `\nBe short, friendly, Gen Z. Remember what THIS user already told you.` +

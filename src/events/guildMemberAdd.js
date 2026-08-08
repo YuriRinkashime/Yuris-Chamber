@@ -57,27 +57,43 @@ export default {
       }
 
       const formatData = { user, guild, member };
-      const welcomeMessage = formatWelcomeMessage(
+      // Prefer Firebase fields from /welcomesetup (welcomeMessage / welcomeEmbed)
+      const rawText =
+        welcomeConfig.welcomeMessage ||
         welcomeConfig.joinMessage ||
-          welcomeConfig.joinEmbed?.description ||
-          botConfig.welcome?.defaultWelcomeMessage ||
-          'Welcome {user} to **{server}**!',
-        formatData,
-      );
+        welcomeConfig.welcomeEmbed?.description ||
+        welcomeConfig.joinEmbed?.description ||
+        botConfig.welcome?.defaultWelcomeMessage ||
+        'Welcome {user} to **{server}**!';
+
+      const welcomeMessage = formatWelcomeMessage(rawText, formatData);
 
       const embedTitle = formatWelcomeMessage(
-        welcomeConfig.joinEmbed?.title || '👋 Welcome',
+        welcomeConfig.welcomeEmbed?.title ||
+          welcomeConfig.joinEmbed?.title ||
+          '👋 Welcome',
         formatData,
       );
-      const embedFooter = welcomeConfig.joinEmbed?.footer
-        ? formatWelcomeMessage(welcomeConfig.joinEmbed.footer, formatData)
+      const embedFooter = (
+        welcomeConfig.welcomeEmbed?.footer ||
+        welcomeConfig.joinEmbed?.footer
+      )
+        ? formatWelcomeMessage(
+            welcomeConfig.welcomeEmbed?.footer || welcomeConfig.joinEmbed?.footer,
+            formatData,
+          )
         : `Welcome to ${guild.name}!`;
 
       if (permissions.has(PermissionFlagsBits.EmbedLinks)) {
         const embed = new EmbedBuilder()
           .setTitle(embedTitle)
           .setDescription(welcomeMessage)
-          .setColor(welcomeConfig.joinEmbed?.color || getColor('success') || 0xc4a1ff)
+          .setColor(
+            welcomeConfig.welcomeEmbed?.color ||
+              welcomeConfig.joinEmbed?.color ||
+              getColor('success') ||
+              0xc4a1ff,
+          )
           .setThumbnail(user.displayAvatarURL())
           .addFields(
             { name: 'User', value: `${user.tag}`, inline: true },

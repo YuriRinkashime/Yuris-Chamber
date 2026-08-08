@@ -6,11 +6,9 @@ import {
   saveUserAiHistory,
   clearUserAiHistory,
   saveUserAiPrefs,
-  buildSystemInstructions } from '../../services/aiService.js';
+  buildSystemInstructions,
+} from '../../services/aiService.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
-
-const MENTION_RULE =
-  '\n\nMENTION RULE: To mention a Discord user you MUST write exactly <@USER_ID> (example: <@885316532673085482>). Never write @Name or bare @numbers without angle brackets.';
 
 function provider() {
   return (process.env.AI_PROVIDER || 'naga').toLowerCase();
@@ -30,15 +28,24 @@ function aiMissingMessage() {
   return 'AI is not configured (missing GEMINI_API_KEY).';
 }
 
-/** Turn bare @123456... into <@123456...> so Discord can ping */
-function normalizeMentions(text) {
+/**
+ * Fix AI mention mistakes:
+ * - literal <@USER_ID> / @USER_ID placeholders → real speaker id
+ * - bare @123456789012345678 → <@123...>
+ */
+function fixMentions(text, currentUserId) {
   if (!text) return text;
-  // already proper <@id>
-  // convert @123456789012345678 (17-20 digits) not already inside < >
-  return String(text).replace(
-    /(^|[^<])@(\d{17,20})\b/g,
-    (_, pre, id) => `${pre}<@${id}>`,
-  );
+  let out = String(text);
+
+  // Placeholder tokens the model copies from instructions
+  out = out.replace(/<@USER_ID>/gi, `<@${currentUserId}>`);
+  out = out.replace(/@USER_ID\b/gi, `<@${currentUserId}>`);
+  out = out.replace(/\{USER_ID\}/gi, currentUserId);
+
+  // Bare @snowflake not already wrapped
+  out = out.replace(/(^|[^<])@(\d{17,20})\b/g, (_, pre, id) => `${pre}<@${id}>`);
+
+  return out;
 }
 
 export default {
@@ -78,11 +85,13 @@ export default {
     const config = await getAiConfig(client, guildId);
     if (!config.enabled) {
       return InteractionHelper.safeEditReply(interaction, {
-        content: 'AI is disabled on this server.' });
+        content: 'AI is disabled on this server.',
+      });
     }
     if (!aiReady()) {
       return InteractionHelper.safeEditReply(interaction, {
-        content: aiMissingMessage() });
+        content: aiMissingMessage(),
+      });
     }
 
     const lower = userMessage.toLowerCase().trim();
@@ -107,12 +116,11 @@ export default {
     }
 
     if (
-      /\b(personal(ize)?|custom(ize)?|be my ai|from now on (you|always))\b/i.test(
-        lower,
-      )
+      /\b(personal(ize)?|custom(ize)?|be my ai|from now on (you|always))\b/i.test(lower)
     ) {
       await saveUserAiPrefs(client, guildId, userId, {
-        customStyle: userMessage.slice(0, 800) });
+        customStyle: userMessage.slice(0, 800),
+      });
     }
     if (/\b(reset (style|personality|ai)|default yuri|normal mode)\b/i.test(lower)) {
       await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
@@ -126,15 +134,22 @@ export default {
         userId,
         config.systemInstructions,
       );
-      systemInstructions += MENTION_RULE;
+
+      // Real IDs — never tell the model to type the words USER_ID
+      systemInstructions +=
+        `\n\nCurrent speaker: ${interaction.user.username} (Discord ID ${userId}).` +
+        `\nTo mention THIS speaker write exactly: <@${userId}>` +
+        `\nTo mention someone else, only use a real numeric Discord ID inside <@...>.` +
+        `\nNever write the text USER_ID, <@USER_ID>, or @USER_ID as a placeholder.`;
 
       let answer = await generateReply({
         systemInstructions,
         userMessage,
         model: config.model,
-        history });
+        history,
+      });
 
-      answer = normalizeMentions(answer);
+      answer = fixMentions(answer, userId);
 
       const maxLen = config.maxReplyLength || 1800;
       if (answer.length > maxLen) answer = answer.slice(0, maxLen - 3) + '...';
@@ -146,15 +161,22 @@ export default {
         { role: 'model', parts: [{ text: answer }] },
       ]);
 
+      // Extract user ids to allow-mention explicitly (more reliable than parse)
+      const mentionIds = [...answer.matchAll(/<@!?(\d{17,20})>/g)].map((m) => m[1]);
+
       return InteractionHelper.safeEditReply(interaction, {
         content:
           `**${interaction.user}** asked:\n> ${userMessage.slice(0, 300)}${
             userMessage.length > 300 ? '…' : ''
           }\n\n${answer}`,
         allowedMentions: {
-          parse: ['users', 'roles'] } });
+          users: mentionIds.length ? mentionIds : [userId],
+        },
+      });
     } catch (error) {
       return InteractionHelper.safeEditReply(interaction, {
-        content: `AI error: ${error.message}` });
+        content: `AI error: ${error.message}`,
+      });
     }
-  } };
+  },
+};
