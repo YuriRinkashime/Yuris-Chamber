@@ -469,6 +469,95 @@ export async function purgePollIfMessageMissing(client, poll) {
   return true;
 }
 
+
+/** Check if member can manage this poll */
+export function canManagePoll(interaction, poll) {
+  if (!interaction?.user?.id) return false;
+  const owners = String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (owners.includes(interaction.user.id)) return true;
+  if (poll?.createdBy && poll.createdBy === interaction.user.id) return true;
+  try {
+    if (interaction.memberPermissions?.has?.('ManageMessages')) return true;
+  } catch (_) {}
+  return false;
+}
+
+/** Apply edits from dashboard or Discord modal */
+export async function applyPollEdit(client, poll, {
+  question,
+  optionsText,
+  minutes,
+  seconds,
+  totalSeconds,
+} = {}) {
+  if (!poll || poll.ended) return { ok: false, error: 'Poll already ended' };
+
+  if (question && String(question).trim()) {
+    poll.question = String(question).trim().slice(0, 200);
+  }
+
+  if (optionsText != null && String(optionsText).trim()) {
+    const labels = String(optionsText)
+      .split(/\r?\n|\|/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (labels.length < 2) {
+      return { ok: false, error: 'Need at least 2 options' };
+    }
+    const oldByLabel = Object.fromEntries(
+      (poll.options || []).map((o) => [o.label, o.votes || []]),
+    );
+    poll.options = labels.map((label, i) => ({
+      id: i,
+      label: label.slice(0, 80),
+      votes: oldByLabel[label] ? [...oldByLabel[label]] : [],
+    }));
+  }
+
+  let addMs = null;
+  if (totalSeconds != null && String(totalSeconds).trim() !== '') {
+    const sec = parseInt(totalSeconds, 10);
+    if (!Number.isFinite(sec) || sec < 10 || sec > 10080 * 60) {
+      return { ok: false, error: 'Duration must be 10 seconds – 7 days' };
+    }
+    addMs = sec * 1000;
+  } else {
+    const m =
+      minutes != null && String(minutes).trim() !== ''
+        ? parseInt(minutes, 10)
+        : 0;
+    const s =
+      seconds != null && String(seconds).trim() !== ''
+        ? parseInt(seconds, 10)
+        : 0;
+    if (m || s) {
+      if (!Number.isFinite(m) || m < 0 || m > 10080) {
+        return { ok: false, error: 'Minutes must be 0–10080' };
+      }
+      if (!Number.isFinite(s) || s < 0 || s > 59) {
+        return { ok: false, error: 'Seconds must be 0–59' };
+      }
+      const total = m * 60 + s;
+      if (total < 10) {
+        return { ok: false, error: 'Minimum duration is 10 seconds' };
+      }
+      addMs = total * 1000;
+    }
+  }
+  if (addMs != null) {
+    poll.endsAt = Date.now() + addMs;
+  }
+
+  await savePoll(client, poll);
+  await syncPollMessage(client, poll);
+  await upsertOwnerPollCard(client, poll, { note: 'Poll edited' }).catch(() => {});
+  return { ok: true, poll };
+}
+
 export async function endPoll(client, poll) {
   if (!poll || poll.ended) return poll;
 
