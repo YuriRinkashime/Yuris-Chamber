@@ -190,9 +190,25 @@ export async function getUserLevelData(client, guildId, userId) {
       );
     }
 
-    const key = getUserLevelKey(guildId, userId);
-    const data = await client.db.get(key);
-    
+    const canonical = getUserLevelKey(guildId, userId);
+    // Try canonical + legacy key shapes (pre-migration / old hosts)
+    const candidates = [
+      canonical,
+      `${guildId}:leveling:users:${userId}`,
+      `leveling:${guildId}:${userId}`,
+    ];
+
+    let data = null;
+    let foundKey = null;
+    for (const key of candidates) {
+      const raw = await client.db.get(key, null);
+      if (raw && typeof raw === 'object') {
+        data = raw;
+        foundKey = key;
+        break;
+      }
+    }
+
     if (!data) {
       return {
         xp: 0,
@@ -202,14 +218,21 @@ export async function getUserLevelData(client, guildId, userId) {
         rank: 0
       };
     }
-    
-    return {
+
+    const normalized = {
       xp: Math.max(0, data.xp || 0),
       level: Math.max(0, Math.min(data.level || 0, MAX_LEVEL)),
-      totalXp: Math.max(0, data.totalXp || 0),
+      totalXp: Math.max(0, data.totalXp || data.total_xp || 0),
       lastMessage: data.lastMessage || 0,
       rank: data.rank || 0
     };
+
+    // Migrate legacy key → canonical so it never "disappears" again
+    if (foundKey && foundKey !== canonical) {
+      await client.db.set(canonical, normalized).catch(() => {});
+    }
+
+    return normalized;
   } catch (error) {
     logger.error(`Error getting user level data for ${userId}:`, error);
     if (error instanceof YurisChamberError) throw error;

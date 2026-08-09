@@ -1,17 +1,19 @@
 import { MongoClient } from 'mongodb';
 import { logger } from '../logger.js';
 
-/**
- * MongoDB Atlas KV store — same interface as firebaseDb
- * Collection: kv  |  documents: { _id: key, value, updatedAt }
- */
-
 let client = null;
 let collection = null;
-let connected = false;
 
 const cache = new Map();
 const DEFAULT_TTL_MS = 30_000;
+
+function ttlFor(key) {
+  const k = String(key);
+  if (k.includes(':leveling:users:')) return 8_000;
+  if (k === 'bot:presence') return 30_000;
+  if (k.startsWith('poll')) return 20_000;
+  return DEFAULT_TTL_MS;
+}
 
 function cacheGet(key) {
   const hit = cache.get(key);
@@ -20,9 +22,12 @@ function cacheGet(key) {
   return { value: hit.value, stale: false };
 }
 
-function cacheSet(key, value, ttl = DEFAULT_TTL_MS) {
-  cache.set(key, { value, expiresAt: Date.now() + ttl });
-  if (cache.size > 3000) {
+function cacheSet(key, value, ttl = null) {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + (ttl ?? ttlFor(key)),
+  });
+  if (cache.size > 4000) {
     const k = cache.keys().next().value;
     cache.delete(k);
   }
@@ -35,39 +40,27 @@ function cacheDel(key) {
 class MongoKvStore {
   async connect() {
     const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
-    if (!uri) {
-      throw new Error('MONGODB_URI env var is missing');
-    }
+    if (!uri) throw new Error('MONGODB_URI env var is missing');
 
+    client = new MongoClient(uri, {
+      maxPoolSize: 15,
+      serverSelectionTimeoutMS: 15_000,
+      retryWrites: true,
+    });
+    await client.connect();
+    await client.db().command({ ping: 1 });
+
+    let dbName = process.env.MONGODB_DB || 'yuris_chamber';
     try {
-      client = new MongoClient(uri, {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 15_000,
-      });
-      await client.connect();
-      // ping
-      await client.db().command({ ping: 1 });
-      const dbName =
-        process.env.MONGODB_DB ||
-        (() => {
-          try {
-            const path = new URL(uri).pathname.replace(/^\//, '');
-            return path.split('?')[0] || 'yuris_chamber';
-          } catch {
-            return 'yuris_chamber';
-          }
-        })();
-      const db = client.db(dbName || 'yuris_chamber');
-      collection = db.collection('kv');
-      await collection.createIndex({ _id: 1 }).catch(() => {});
-      connected = true;
-      logger.info(`✅ MongoDB connected (db=${dbName}, collection=kv)`);
-      return true;
-    } catch (error) {
-      logger.error('MongoDB connect failed:', error.message);
-      connected = false;
-      return false;
-    }
+      const path = new URL(uri).pathname.replace(/^\//, '').split('?')[0];
+      if (path) dbName = path;
+    } catch (_) {}
+
+    const db = client.db(dbName || 'yuris_chamber');
+    collection = db.collection('kv');
+    await collection.createIndex({ _id: 1 }).catch(() => {});
+    logger.info(`✅ MongoDB connected (db=${dbName}, collection=kv)`);
+    return true;
   }
 
   async get(key, defaultValue = null) {
@@ -76,7 +69,6 @@ class MongoKvStore {
     if (cached && !cached.stale) {
       return cached.value !== undefined ? cached.value : defaultValue;
     }
-
     if (!collection) return defaultValue;
 
     try {
@@ -96,8 +88,10 @@ class MongoKvStore {
 
   async set(key, value, _ttl = null) {
     const k = String(key);
-    cacheSet(k, value);
-    if (!collection) return true;
+    cacheSet(k, value); // update cache immediately so levels don't read stale 0
+    if (!collection) {
+      throw new Error('MongoDB not connected — cannot save ' + k);
+    }
     await collection.updateOne(
       { _id: k },
       { $set: { value, updatedAt: Date.now() } },
@@ -117,7 +111,9 @@ class MongoKvStore {
   async list(prefix = '') {
     if (!collection) return [];
     const p = String(prefix || '');
-    const filter = p ? { _id: { $regex: `^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } } : {};
+    const filter = p
+      ? { _id: { $regex: `^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } }
+      : {};
     const docs = await collection.find(filter).project({ _id: 1 }).toArray();
     return docs.map((d) => d._id);
   }

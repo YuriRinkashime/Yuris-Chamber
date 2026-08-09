@@ -4,7 +4,8 @@ import { logger } from '../logger.js';
 import { validateGuildConfigOrThrow } from '../schemas.js';
 
 /**
- * MongoDB-only database wrapper (Firebase removed)
+ * MongoDB-only wrapper.
+ * NEVER uses memory fallback when MONGODB_URI is set (that was wiping levels on restart).
  */
 class DatabaseWrapper {
   constructor() {
@@ -21,7 +22,13 @@ class DatabaseWrapper {
 
     const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
     if (!uri) {
-      logger.error('MONGODB_URI is missing — falling back to memory');
+      const allowMem = process.env.ALLOW_MEMORY_DB === '1';
+      if (!allowMem) {
+        throw new Error(
+          'MONGODB_URI is missing. Refusing memory DB (would reset levels on restart).',
+        );
+      }
+      logger.error('MONGODB_URI missing — memory DB (ALLOW_MEMORY_DB=1)');
       this.db = new MemoryStorage();
       this.useFallback = true;
       this.connectionType = 'memory';
@@ -30,29 +37,32 @@ class DatabaseWrapper {
       return;
     }
 
-    try {
-      logger.info('Connecting to MongoDB Atlas...');
-      const ok = await mongoDb.connect();
-      if (ok) {
-        this.db = mongoDb;
-        this.connectionType = 'mongodb';
-        this.useFallback = false;
-        this.degradedReason = null;
-        this.initialized = true;
-        logger.info('✅ MongoDB Atlas initialized');
-        return;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        logger.info(`Connecting to MongoDB Atlas (attempt ${attempt}/3)...`);
+        const ok = await mongoDb.connect();
+        if (ok) {
+          this.db = mongoDb;
+          this.connectionType = 'mongodb';
+          this.useFallback = false;
+          this.degradedReason = null;
+          this.initialized = true;
+          logger.info('✅ MongoDB Atlas initialized (levels persist here)');
+          return;
+        }
+        lastErr = new Error('mongoDb.connect returned false');
+      } catch (error) {
+        lastErr = error;
+        logger.warn(`Mongo attempt ${attempt} failed:`, error.message);
       }
-    } catch (error) {
-      logger.warn('MongoDB connection failed:', error.message);
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
 
-    this.db = new MemoryStorage();
-    this.useFallback = true;
-    this.connectionType = 'memory';
-    this.degradedReason = 'MONGODB_UNAVAILABLE';
-    logger.warn('⚠️ DATABASE DEGRADED - in-memory only (data lost on restart)');
-    this.initialized = true;
-    this.degradedModeWarningShown = true;
+    // Do NOT fall back to memory — that resets levels every restart
+    throw new Error(
+      `MongoDB unavailable after 3 attempts: ${lastErr?.message || lastErr}. Levels not loaded.`,
+    );
   }
 
   async set(key, value, ttl = null) {
@@ -81,7 +91,7 @@ class DatabaseWrapper {
   async exists(key) {
     if (this.db.exists) return this.db.exists(key);
     const value = await this.db.get(key);
-    return value !== null;
+    return value !== null && value !== undefined;
   }
 
   async increment(key, amount = 1) {
@@ -129,14 +139,14 @@ export async function initializeDatabase() {
     return { db };
   } catch (error) {
     logger.error('❌ Database Initialization Error:', error);
-    return { db };
+    throw error; // surface to app start — better crash than silent memory wipe
   }
 }
 
 export async function getFromDb(key, defaultValue = null) {
   try {
     const value = await db.get(key);
-    return value === null ? defaultValue : value;
+    return value === null || value === undefined ? defaultValue : value;
   } catch (error) {
     logger.error(`Error getting value for key ${key}:`, error);
     return defaultValue;
