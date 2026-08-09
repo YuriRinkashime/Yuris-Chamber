@@ -331,6 +331,28 @@ export async function checkGiveaways(client) {
       return;
     }
 
+    // Mongo simple giveaways (from /giveaway modal)
+    try {
+      const { endSimpleGiveaway } = await import('../commands/Fun/giveaway.js');
+      const keys = (await client.db.list('giveaway:').catch(() => [])) || [];
+      for (const key of keys) {
+        if (!key.startsWith('giveaway:')) continue;
+        // skip rate-limit helper keys giveaway:userId:id
+        const parts = key.split(':');
+        if (parts.length !== 2) continue;
+        const g = await client.db.get(key, null);
+        if (!g || g.ended || g.isEnded) continue;
+        if (g.endsAt && Date.now() >= g.endsAt) {
+          const id = g.id || parts[1];
+          await endSimpleGiveaway(client, id).catch((e) =>
+            logger.warn('endSimpleGiveaway', e.message),
+          );
+        }
+      }
+    } catch (e) {
+      logger.warn('simple giveaway scan:', e.message);
+    }
+
     const endedGiveaways = await getEndedGiveaways(client);
     
     if (endedGiveaways.length === 0) {

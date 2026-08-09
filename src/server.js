@@ -882,8 +882,8 @@ app.get(path('/api/polls'), requireAuth, async (req, res) => {
     const tab = req.query.tab === 'ended' ? 'ended' : 'active';
     const verify = req.query.sync === '1' || req.query.verify === '1';
     const polls = tab === 'ended'
-      ? await listEndedPolls(discordClient, { verifyDiscord: verify })
-      : await listActivePolls(discordClient, { verifyDiscord: verify });
+      ? await listEndedPolls(discordClient, { verifyDiscord: true }, { verifyDiscord: verify })
+      : await listActivePolls(discordClient, { verifyDiscord: true }, { verifyDiscord: verify });
     const payload = (polls || []).map((poll) => {
       const stats = getPollStats(poll);
       return {
@@ -943,6 +943,13 @@ app.post(path('/dashboard/polls/edit'), requireAuth, async (req, res) => {
       if (wantsJson) return res.status(404).json({ ok: false, error: 'Not found' });
       return res.redirect(path('/dashboard/polls') + '?err=1');
     }
+    poll.paused = true;
+    try { await discordClient.db.set && null; } catch(_) {}
+    try {
+      const { savePoll, syncPollMessage } = await import('./services/pollService.js');
+      await savePoll(discordClient, poll);
+      await syncPollMessage(discordClient, poll).catch(() => {});
+    } catch (_) {}
     const result = await applyPollEdit(discordClient, poll, {
       question: req.body.question,
       optionsText: req.body.options,
@@ -1006,9 +1013,13 @@ app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
   try {
     if (discordClient?.db?.list) {
       const keys = await discordClient.db.list('giveaway:');
-      for (const k of keys.slice(0, 50)) {
+      for (const k of keys.slice(0, 80)) {
+        // only real giveaways: giveaway:guild-timestamp (one colon)
+        if ((k.match(/:/g) || []).length !== 1) continue;
         const g = await discordClient.db.get(k, null);
-        if (g && typeof g === 'object') items.push({ key: k, ...g });
+        if (g && typeof g === 'object' && (g.prize || g.messageId)) {
+          items.push({ key: k, ...g });
+        }
       }
     }
   } catch (e) {
@@ -1079,15 +1090,21 @@ app.post(path('/dashboard/giveaways/end'), requireAuth, async (req, res) => {
     return res.redirect(path('/dashboard/giveaways'));
   }
   try {
-    const g = await discordClient.db.get(key, null);
-    if (g && !g.ended) {
-      g.ended = true;
-      g.isEnded = true;
-      g.endedAt = new Date().toISOString();
-      await discordClient.db.set(key, g);
-    }
+    const { endSimpleGiveaway } = await import('./commands/Fun/giveaway.js');
+    const id = key.replace(/^giveaway:/, '');
+    await endSimpleGiveaway(discordClient, id);
   } catch (e) {
     console.error('gw end', e);
+    // fallback flag only
+    try {
+      const g = await discordClient.db.get(key, null);
+      if (g) {
+        g.ended = true;
+        g.isEnded = true;
+        g.endedAt = new Date().toISOString();
+        await discordClient.db.set(key, g);
+      }
+    } catch (_) {}
   }
   res.redirect(path('/dashboard/giveaways'));
 });
@@ -1102,8 +1119,8 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
       const doVerify = req.query.sync === '1';
       polls =
         tab === 'ended'
-          ? await listEndedPolls(discordClient, { verifyDiscord: doVerify })
-          : await listActivePolls(discordClient, { verifyDiscord: doVerify });
+          ? await listEndedPolls(discordClient, { verifyDiscord: true }, { verifyDiscord: doVerify })
+          : await listActivePolls(discordClient, { verifyDiscord: true }, { verifyDiscord: doVerify });
     } else {
       err = 'Database offline';
     }
