@@ -1,5 +1,6 @@
 import { MemoryStorage } from '../memoryStorage.js';
 import { firebaseDb } from './firebaseDb.js';
+import { mongoDb } from './mongoDb.js';
 import { logger } from '../logger.js';
 import { validateGuildConfigOrThrow } from '../schemas.js';
 
@@ -16,28 +17,52 @@ class DatabaseWrapper {
   async initialize() {
     if (this.initialized) return;
 
-    // Firebase only
-    try {
-      logger.info('Attempting to connect to Firebase Firestore...');
-      const ok = await firebaseDb.connect();
-      if (ok) {
-        this.db = firebaseDb;
-        this.connectionType = 'firebase';
-        this.useFallback = false;
-        this.degradedReason = null;
-        this.initialized = true;
-        logger.info('✅ Firebase Firestore initialized');
-        return;
+    const driver = String(process.env.DB_DRIVER || '').toLowerCase().trim();
+    const hasMongo = !!(process.env.MONGODB_URI || process.env.MONGO_URI);
+
+    // Prefer Mongo when requested or URI present
+    if (driver === 'mongodb' || driver === 'mongo' || (hasMongo && driver !== 'firebase')) {
+      try {
+        logger.info('Attempting to connect to MongoDB Atlas...');
+        const ok = await mongoDb.connect();
+        if (ok) {
+          this.db = mongoDb;
+          this.connectionType = 'mongodb';
+          this.useFallback = false;
+          this.degradedReason = null;
+          this.initialized = true;
+          logger.info('✅ MongoDB Atlas initialized');
+          return;
+        }
+      } catch (error) {
+        logger.warn('MongoDB connection failed:', error.message);
       }
-    } catch (error) {
-      logger.warn('Firebase connection failed:', error.message);
     }
 
-    // Memory fallback only if Firebase fails
+    // Firebase fallback / explicit
+    if (driver === 'firebase' || process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        logger.info('Attempting to connect to Firebase Firestore...');
+        const ok = await firebaseDb.connect();
+        if (ok) {
+          this.db = firebaseDb;
+          this.connectionType = 'firebase';
+          this.useFallback = false;
+          this.degradedReason = null;
+          this.initialized = true;
+          logger.info('✅ Firebase Firestore initialized');
+          return;
+        }
+      } catch (error) {
+        logger.warn('Firebase connection failed:', error.message);
+      }
+    }
+
+    // Memory fallback
     this.db = new MemoryStorage();
     this.useFallback = true;
     this.connectionType = 'memory';
-    this.degradedReason = 'FIREBASE_UNAVAILABLE';
+    this.degradedReason = 'NO_DATABASE';
     logger.warn('⚠️ DATABASE DEGRADED - in-memory only (data lost on restart)');
     this.initialized = true;
     this.degradedModeWarningShown = true;
@@ -88,12 +113,12 @@ class DatabaseWrapper {
     return newValue;
   }
 
-  isDegraded() {
-    return this.useFallback;
+  isAvailable() {
+    return this.initialized && !this.useFallback;
   }
 
-  isAvailable() {
-    return this.db && !this.useFallback;
+  isDegraded() {
+    return this.useFallback;
   }
 
   getStatus() {
@@ -115,9 +140,9 @@ export const db = new DatabaseWrapper();
 
 export async function initializeDatabase() {
   try {
-    logger.info('Initializing Database (Firebase)...');
+    logger.info('Initializing Database...');
     await db.initialize();
-    logger.info('✅ Database initialized');
+    logger.info(`✅ Database initialized (${db.getConnectionType()})`);
     return { db };
   } catch (error) {
     logger.error('❌ Database Initialization Error:', error);

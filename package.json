@@ -1,7 +1,7 @@
 {
   "name": "yuris-chamber",
   "version": "3.0.0",
-  "description": "Yuri's Chamber — Discord bot for BANORANT PH",
+  "description": "Yuri's Chamber \u2014 Discord bot for BANORANT PH",
   "main": "src/app.js",
   "type": "module",
   "scripts": {
@@ -17,7 +17,8 @@
     "node-cron": "^4.2.1",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "mongodb": "^6.12.0"
   },
   "engines": {
     "node": ">=20.10.0"
