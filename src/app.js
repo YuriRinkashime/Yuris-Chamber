@@ -16,6 +16,7 @@ import { EXPECTED_SCHEMA_VERSION, EXPECTED_SCHEMA_LABEL } from './config/databas
 import { startServer } from './server.js';
 import { loadRuntimeSettings } from './services/runtimeSettings.js';
 import { checkPolls } from './services/pollService.js';
+import { runFirebaseToMongoMigrationIfRequested } from './utils/bootMigrate.js';
 
 class YurisChamber extends Client {
   constructor() {
@@ -48,8 +49,11 @@ class YurisChamber extends Client {
       startupLog("Starting Yuri's Chamber...");
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      // One-shot data transfer when MIGRATE_ON_BOOT=1
+      await runFirebaseToMongoMigrationIfRequested();
+
       startupLog('Initializing database...');
-           const dbInstance = await initializeDatabase();
+      const dbInstance = await initializeDatabase();
       this.db = dbInstance.db;
 
       const guildId = process.env.GUILD_ID;
