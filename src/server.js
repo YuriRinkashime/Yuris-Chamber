@@ -529,6 +529,46 @@ app.post(path('/dashboard/guild'), requireAuth, (req, res) => {
   res.redirect(path('/dashboard/commands'));
 });
 
+
+app.post(path('/dashboard/presence'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim().slice(0, 128);
+    const typeName = String(req.body?.type || 'Custom');
+    if (!text) return res.redirect(path('/dashboard') + '?err=presence');
+
+    const { ActivityType } = await import('discord.js');
+    const TYPE_MAP = {
+      Playing: ActivityType.Playing,
+      Watching: ActivityType.Watching,
+      Listening: ActivityType.Listening,
+      Competing: ActivityType.Competing,
+      Custom: ActivityType.Custom,
+    };
+    const type = TYPE_MAP[typeName] ?? ActivityType.Custom;
+    const presence =
+      type === ActivityType.Custom
+        ? { activities: [{ name: 'Custom Status', type, state: text }], status: 'online' }
+        : { activities: [{ name: text, type }], status: 'online' };
+
+    if (discordClient?.user) {
+      await discordClient.user.setPresence(presence);
+    }
+    if (discordClient?.db) {
+      await discordClient.db.set('bot:presence', {
+        text,
+        typeName,
+        updatedAt: Date.now(),
+      });
+    }
+    presenceCache.data = { text, typeName };
+    presenceCache.at = Date.now();
+    return res.redirect(path('/dashboard') + '?presence=1');
+  } catch (e) {
+    console.error('presence save failed:', e);
+    return res.redirect(path('/dashboard') + '?err=presence');
+  }
+});
+
 app.get(path('/dashboard'), requireAuth, async (req, res) => {
   // Useful intel counts (best-effort)
   let levelUsers = 0;
