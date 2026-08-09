@@ -162,13 +162,21 @@ export async function endSimpleGiveaway(client, giveawayId) {
   }
 
   if (!pick.length) {
-    await channel.send(`Giveaway **${g.prize}** ended — no valid entries.`).catch(() => {});
+    const m = await channel.send(`Giveaway **${g.prize}** ended — no valid entries.`).catch(() => null);
+    if (m) {
+      g.winnerMessageId = m.id;
+      await client.db.set(key, g);
+    }
   } else {
-    await channel
+    const m = await channel
       .send({
         content: `🎉 Congratulations ${pick.map((x) => `<@${x}>`).join(', ')}!\nYou won: **${g.prize}**`,
       })
-      .catch(() => {});
+      .catch(() => null);
+    if (m) {
+      g.winnerMessageId = m.id;
+      await client.db.set(key, g);
+    }
   }
   return g;
 }

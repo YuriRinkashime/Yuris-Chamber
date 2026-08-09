@@ -677,7 +677,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           }).join('\\n') || 'No logs yet';
         } catch (e) {}
       }
-      tick(); setInterval(tick, 15000);
+      tick(); setInterval(tick, 3000);
       </script>`,
       'dashboard',
     ),
@@ -1009,60 +1009,85 @@ app.post(path('/dashboard/dms/delete'), requireAuth, async (req, res) => {
 
 
 app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
-  let items = [];
-  try {
-    if (discordClient?.db?.list) {
-      const keys = await discordClient.db.list('giveaway:');
-      for (const k of keys.slice(0, 80)) {
-        // only real giveaways: giveaway:guild-timestamp (one colon)
-        if ((k.match(/:/g) || []).length !== 1) continue;
-        const g = await discordClient.db.get(k, null);
-        if (g && typeof g === 'object' && (g.prize || g.messageId)) {
-          items.push({ key: k, ...g });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('giveaways list', e);
-  }
-  items.sort((a, b) => (b.endsAt || b.endTime || 0) - (a.endsAt || a.endTime || 0));
-
-  const cards = items.length
-    ? items.map((g) => {
-        const ended = g.ended || g.isEnded;
-        const ends = g.endsAt || g.endTime;
-        const endsLabel = ends
-          ? (typeof ends === 'number' ? new Date(ends).toLocaleString() : String(ends))
-          : '—';
-        const parts = (g.participants || []).length;
-        return `<div class="card">
-          <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-            <h2 style="text-transform:none;letter-spacing:0;font-size:15px;margin:0">${escapeHtml(g.prize || g.title || g.key)}</h2>
-            <span class="badge ${ended ? 'off' : 'on'}">${ended ? 'ENDED' : 'ACTIVE'}</span>
-          </div>
-          <p class="muted">Ends: ${escapeHtml(endsLabel)} · Entries: ${parts} · Winners: ${g.winnerCount || 1}</p>
-          <div class="row" style="gap:8px;margin-top:10px">
-            ${ended ? '' : `<form method="POST" action="${path('/dashboard/giveaways/end')}" style="display:inline">
-              <input type="hidden" name="key" value="${escapeHtml(g.key)}"/>
-              <button class="btn" type="submit">End</button></form>`}
-            <form method="POST" action="${path('/dashboard/giveaways/delete')}" style="display:inline" onsubmit="return confirm('Delete giveaway from Discord + MongoDB?')">
-              <input type="hidden" name="key" value="${escapeHtml(g.key)}"/>
-              <button class="btn danger" type="submit">Delete</button>
-            </form>
-          </div>
-        </div>`;
-      }).join('')
-    : '<div class="card"><p class="muted">No giveaways in database.</p></div>';
-
   res.send(
     layout(
       'Giveaways',
       `<h1>Giveaways</h1>
-      <div class="banner"><div class="cap">Giveaway chamber<small>End or delete · removes MongoDB key</small></div></div>
-      ${cards}`,
+      <div class="banner"><div class="cap">Giveaway chamber<small>Auto-refresh · End / Delete syncs Discord + Mongo</small></div></div>
+      <div id="gw-root"><p class="muted">Loading…</p></div>
+      <script>
+      const api = ${JSON.stringify(path('/api/giveaways'))};
+      const endUrl = ${JSON.stringify(path('/dashboard/giveaways/end'))};
+      const delUrl = ${JSON.stringify(path('/dashboard/giveaways/delete'))};
+      function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+      async function load() {
+        try {
+          const r = await fetch(api, { credentials: 'same-origin' });
+          if (!r.ok) return;
+          const d = await r.json();
+          const items = d.items || [];
+          const root = document.getElementById('gw-root');
+          if (!items.length) {
+            root.innerHTML = '<div class="card"><p class="muted">No giveaways in database.</p></div>';
+            return;
+          }
+          root.innerHTML = items.map(g => {
+            const ended = g.ended || g.isEnded;
+            const ends = g.endsAt ? new Date(g.endsAt).toLocaleString() : '—';
+            const entries = (g.entrants || g.participants || []).length;
+            const winners = (g.winnerIds || []).map(id => '<span class=muted>@'+id+'</span>').join(', ') || (ended ? '<em>none</em>' : '—');
+            const winnersHtml = ended
+              ? '<p class="muted">Winners: ' + winners + '</p>'
+              : '';
+            return '<div class="card">' +
+              '<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+              '<h2 style="text-transform:none;letter-spacing:0;font-size:15px;margin:0">' + esc(g.prize||g.key) + '</h2>' +
+              '<span class="badge ' + (ended?'off':'on') + '">' + (ended?'ENDED':'ACTIVE') + '</span></div>' +
+              '<p class="muted">Ends: ' + esc(ends) + ' · Entries: ' + entries + ' · Winner slots: ' + (g.winners||g.winnerCount||1) + '</p>' +
+              winnersHtml +
+              '<div class="row" style="gap:8px;margin-top:10px">' +
+              (ended ? '' : '<form method="POST" action="'+endUrl+'" style="display:inline"><input type="hidden" name="key" value="'+esc(g.key)+'"/><button class="btn" type="submit">End</button></form>') +
+              '<form method="POST" action="'+delUrl+'" style="display:inline" onsubmit="return confirm(\'Delete giveaway + winner message from Discord & Mongo?\')"><input type="hidden" name="key" value="'+esc(g.key)+'"/><button class="btn danger" type="submit">Delete</button></form>' +
+              '</div></div>';
+          }).join('');
+        } catch (e) {}
+      }
+      load();
+      setInterval(load, 3000);
+      </script>`,
       'giveaways',
     ),
   );
+});
+
+app.get(path('/api/giveaways'), requireAuth, async (req, res) => {
+  const items = [];
+  try {
+    if (discordClient?.db?.list) {
+      const keys = await discordClient.db.list('giveaway:');
+      for (const k of keys.slice(0, 80)) {
+        if ((k.match(/:/g) || []).length !== 1) continue;
+        const g = await discordClient.db.get(k, null);
+        if (!g || typeof g !== 'object' || !(g.prize || g.messageId)) continue;
+        // auto-purge if Discord message gone
+        if (g.channelId && g.messageId) {
+          try {
+            const ch = await discordClient.channels.fetch(g.channelId).catch(() => null);
+            const msg = ch ? await ch.messages.fetch(g.messageId).catch(() => null) : null;
+            if (!msg) {
+              await discordClient.db.delete(k);
+              continue;
+            }
+          } catch (_) {}
+        }
+        items.push({ key: k, ...g });
+      }
+    }
+  } catch (e) {
+    console.error('api giveaways', e);
+  }
+  items.sort((a, b) => (b.endsAt || 0) - (a.endsAt || 0));
+  res.json({ items, at: Date.now() });
 });
 
 app.post(path('/dashboard/giveaways/delete'), requireAuth, async (req, res) => {
@@ -1072,10 +1097,19 @@ app.post(path('/dashboard/giveaways/delete'), requireAuth, async (req, res) => {
   }
   try {
     const g = await discordClient.db.get(key, null);
-    if (g?.channelId && g?.messageId) {
+    if (g?.channelId) {
       const ch = await discordClient.channels.fetch(g.channelId).catch(() => null);
-      const msg = ch ? await ch.messages.fetch(g.messageId).catch(() => null) : null;
-      if (msg) await msg.delete().catch(() => {});
+      if (ch) {
+        if (g.messageId) {
+          const msg = await ch.messages.fetch(g.messageId).catch(() => null);
+          if (msg) await msg.delete().catch(() => {});
+        }
+        // winner announcement message
+        if (g.winnerMessageId) {
+          const wmsg = await ch.messages.fetch(g.winnerMessageId).catch(() => null);
+          if (wmsg) await wmsg.delete().catch(() => {});
+        }
+      }
     }
     await discordClient.db.delete(key);
   } catch (e) {
