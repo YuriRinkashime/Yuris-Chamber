@@ -581,9 +581,10 @@ export async function endPoll(client, poll) {
 export async function checkPolls(client) {
   if (!client?.db) return;
   try {
+    // Skip Discord verify on cron — only end expired polls (cheap)
     const active = (await client.db.get(ACTIVE_KEY, [])) || [];
+    if (!active.length) return;
     const now = Date.now();
-
     for (const id of [...active]) {
       const poll = await getPoll(client, id);
       if (!poll) {
@@ -595,29 +596,14 @@ export async function checkPolls(client) {
         await pushEnded(client, id);
         continue;
       }
-
-      // Discord message deleted → drop from dashboard
-      if (await purgePollIfMessageMissing(client, poll)) continue;
-
       if (poll.endsAt && now >= poll.endsAt) {
         await endPoll(client, poll);
         continue;
       }
-
-      // Refresh embed (time + bars) about every minute via cron
-      await syncPollMessage(client, poll);
-      await upsertOwnerPollCard(client, poll).catch(() => {});
-    }
-
-    // Clean ended list: if message deleted, remove entry
-    const ended = (await client.db.get(ENDED_KEY, [])) || [];
-    for (const id of [...ended]) {
-      const poll = await getPoll(client, id);
-      if (!poll) {
-        await removeEnded(client, id);
-        continue;
+      // Refresh embed at most when within last 2 min of ending (saves Discord + DB)
+      if (poll.endsAt && poll.endsAt - now < 120_000) {
+        await syncPollMessage(client, poll).catch(() => {});
       }
-      await purgePollIfMessageMissing(client, poll);
     }
   } catch (e) {
     logger.error('checkPolls:', e?.message || e);

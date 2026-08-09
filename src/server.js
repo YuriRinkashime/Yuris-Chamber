@@ -33,6 +33,8 @@ const port = process.env.PORT || process.env.SERVER_PORT || 3000;
 const host = '0.0.0.0';
 
 let discordClient = null;
+const presenceCache = { data: null, at: 0 };
+const PRESENCE_TTL = 60_000;
 
 const DASHBOARD_USERNAME = process.env.DASHBOARD_USERNAME || '';
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
@@ -424,7 +426,13 @@ app.get(path('/api/live'), requireAuth, async (req, res) => {
   } catch (_) {}
   let saved = null;
   try {
-    saved = await discordClient?.db?.get('bot:presence', null);
+    if (Date.now() - presenceCache.at < PRESENCE_TTL && presenceCache.data !== undefined) {
+      saved = presenceCache.data;
+    } else {
+      saved = await discordClient?.db?.get('bot:presence', null);
+      presenceCache.data = saved;
+      presenceCache.at = Date.now();
+    }
   } catch (_) {}
   let dbMode = 'unknown';
   try {
@@ -585,7 +593,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           }).join('\\n') || 'No logs yet';
         } catch (e) {}
       }
-      tick(); setInterval(tick, 3000);
+      tick(); setInterval(tick, 15000);
       </script>`,
       'dashboard',
     ),
@@ -914,10 +922,11 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
   let err = '';
   try {
     if (discordClient?.db) {
+      const doVerify = req.query.sync === '1';
       polls =
         tab === 'ended'
-          ? await listEndedPolls(discordClient, { verifyDiscord: true })
-          : await listActivePolls(discordClient, { verifyDiscord: true });
+          ? await listEndedPolls(discordClient, { verifyDiscord: doVerify })
+          : await listActivePolls(discordClient, { verifyDiscord: doVerify });
     } else {
       err = 'Database offline';
     }
@@ -1105,12 +1114,7 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
           };
         });
 
-        // Soft auto-refresh whole page every 15s to pick up Discord deletes + new votes
-        // (no Loading flash — full navigation)
-        setTimeout(function(){
-          if(document.querySelector('.poll-edit[style*="display: block"]')) return;
-          location.replace(${JSON.stringify(path('/dashboard/polls'))} + '?tab=' + encodeURIComponent(tab) + '&_=' + Date.now());
-        }, 15000);
+        // No auto full-page reload (was burning Firebase quota). Use Sync now.
       })();
       </script>`,
       'polls',
