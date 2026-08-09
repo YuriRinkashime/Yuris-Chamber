@@ -129,6 +129,7 @@ function layout(title, body, active = '') {
     ['commands', 'Commands', '▣', path('/dashboard/commands')],
     ['dms', 'DMs', '✉', path('/dashboard/dms')],
     ['polls', 'Polls', '📊', path('/dashboard/polls')],
+    ['giveaways', 'Giveaways', '🎁', path('/dashboard/giveaways')],
     ['maintenance', 'Maintenance', '⚙', path('/dashboard/maintenance')],
   ]
     .map(
