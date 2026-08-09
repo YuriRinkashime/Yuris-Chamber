@@ -1,9 +1,11 @@
 import { MemoryStorage } from '../memoryStorage.js';
-import { firebaseDb } from './firebaseDb.js';
 import { mongoDb } from './mongoDb.js';
 import { logger } from '../logger.js';
 import { validateGuildConfigOrThrow } from '../schemas.js';
 
+/**
+ * MongoDB-only database wrapper (Firebase removed)
+ */
 class DatabaseWrapper {
   constructor() {
     this.initialized = false;
@@ -17,52 +19,37 @@ class DatabaseWrapper {
   async initialize() {
     if (this.initialized) return;
 
-    const driver = String(process.env.DB_DRIVER || '').toLowerCase().trim();
-    const hasMongo = !!(process.env.MONGODB_URI || process.env.MONGO_URI);
-
-    // Prefer Mongo when requested or URI present
-    if (driver === 'mongodb' || driver === 'mongo' || (hasMongo && driver !== 'firebase')) {
-      try {
-        logger.info('Attempting to connect to MongoDB Atlas...');
-        const ok = await mongoDb.connect();
-        if (ok) {
-          this.db = mongoDb;
-          this.connectionType = 'mongodb';
-          this.useFallback = false;
-          this.degradedReason = null;
-          this.initialized = true;
-          logger.info('✅ MongoDB Atlas initialized');
-          return;
-        }
-      } catch (error) {
-        logger.warn('MongoDB connection failed:', error.message);
-      }
+    const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
+    if (!uri) {
+      logger.error('MONGODB_URI is missing — falling back to memory');
+      this.db = new MemoryStorage();
+      this.useFallback = true;
+      this.connectionType = 'memory';
+      this.degradedReason = 'NO_MONGODB_URI';
+      this.initialized = true;
+      return;
     }
 
-    // Firebase fallback / explicit
-    if (driver === 'firebase' || process.env.FIREBASE_SERVICE_ACCOUNT) {
-      try {
-        logger.info('Attempting to connect to Firebase Firestore...');
-        const ok = await firebaseDb.connect();
-        if (ok) {
-          this.db = firebaseDb;
-          this.connectionType = 'firebase';
-          this.useFallback = false;
-          this.degradedReason = null;
-          this.initialized = true;
-          logger.info('✅ Firebase Firestore initialized');
-          return;
-        }
-      } catch (error) {
-        logger.warn('Firebase connection failed:', error.message);
+    try {
+      logger.info('Connecting to MongoDB Atlas...');
+      const ok = await mongoDb.connect();
+      if (ok) {
+        this.db = mongoDb;
+        this.connectionType = 'mongodb';
+        this.useFallback = false;
+        this.degradedReason = null;
+        this.initialized = true;
+        logger.info('✅ MongoDB Atlas initialized');
+        return;
       }
+    } catch (error) {
+      logger.warn('MongoDB connection failed:', error.message);
     }
 
-    // Memory fallback
     this.db = new MemoryStorage();
     this.useFallback = true;
     this.connectionType = 'memory';
-    this.degradedReason = 'NO_DATABASE';
+    this.degradedReason = 'MONGODB_UNAVAILABLE';
     logger.warn('⚠️ DATABASE DEGRADED - in-memory only (data lost on restart)');
     this.initialized = true;
     this.degradedModeWarningShown = true;
@@ -100,17 +87,13 @@ class DatabaseWrapper {
   async increment(key, amount = 1) {
     if (this.db.increment) return this.db.increment(key, amount);
     const current = await this.db.get(key, 0);
-    const newValue = current + amount;
+    const newValue = (Number(current) || 0) + amount;
     await this.db.set(key, newValue);
     return newValue;
   }
 
   async decrement(key, amount = 1) {
-    if (this.db.decrement) return this.db.decrement(key, amount);
-    const current = await this.db.get(key, 0);
-    const newValue = current - amount;
-    await this.db.set(key, newValue);
-    return newValue;
+    return this.increment(key, -amount);
   }
 
   isAvailable() {
@@ -140,7 +123,7 @@ export const db = new DatabaseWrapper();
 
 export async function initializeDatabase() {
   try {
-    logger.info('Initializing Database...');
+    logger.info('Initializing Database (MongoDB)...');
     await db.initialize();
     logger.info(`✅ Database initialized (${db.getConnectionType()})`);
     return { db };

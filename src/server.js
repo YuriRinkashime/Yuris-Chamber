@@ -438,7 +438,7 @@ app.get(path('/api/live'), requireAuth, async (req, res) => {
   try {
     if (!discordClient?.db) dbMode = 'offline';
     else if (typeof discordClient.db.isDegraded === 'function' && discordClient.db.isDegraded()) dbMode = 'degraded';
-    else if (typeof discordClient.db.isAvailable === 'function' && discordClient.db.isAvailable()) dbMode = 'firebase';
+    else if (typeof discordClient.db.isAvailable === 'function' && discordClient.db.isAvailable()) dbMode = 'mongodb';
     else dbMode = 'connected';
   } catch (_) { dbMode = 'error'; }
 
@@ -553,7 +553,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           <h2>Chamber intel</h2>
           <p style="margin:0 0 10px;color:var(--text)">Operator notes for <strong>BANORANT CAFE</strong>.</p>
           <ul class="intel">
-            <li><span class="dot"></span> Firebase stores levels, welcome, AI prefs, and DMs</li>
+            <li><span class="dot"></span> MongoDB stores levels, welcome, AI prefs, polls, and DMs</li>
             <li><span class="dot"></span> /setlevel posts in level-up with “modified by Yuri”</li>
             <li><span class="dot"></span> AI persona is edited under the AI tab (up to 12k chars)</li>
             <li><span class="dot"></span> Maintenance blocks commands for everyone, including owner</li>
@@ -586,7 +586,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           const db = document.getElementById('live-db');
           if (db) {
             db.textContent = (b.db || '—').toUpperCase();
-            db.className = 'badge ' + (b.db === 'firebase' || b.db === 'connected' ? 'on' : 'off');
+            db.className = 'badge ' + (b.db === 'mongodb' || b.db === 'connected' || b.db === 'firebase' ? 'on' : 'off');
           }
           document.getElementById('live-logs').textContent = (d.logs || []).map(function(l) {
             return '[' + new Date(l.t).toLocaleTimeString() + '] ' + l.level + ': ' + l.message;
