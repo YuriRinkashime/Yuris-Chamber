@@ -530,11 +530,32 @@ app.post(path('/dashboard/guild'), requireAuth, (req, res) => {
 });
 
 app.get(path('/dashboard'), requireAuth, async (req, res) => {
+  // Useful intel counts (best-effort)
+  let levelUsers = 0;
+  let activePolls = 0;
+  let activeGw = 0;
+  try {
+    if (discordClient?.db?.list) {
+      const keys = await discordClient.db.list('guild:');
+      levelUsers = keys.filter((k) => k.includes(':leveling:users:')).length;
+    }
+    const ap = (await discordClient?.db?.get('polls:active', [])) || [];
+    activePolls = Array.isArray(ap) ? ap.length : 0;
+  } catch (_) {}
+
+  let savedPresence = { text: '', typeName: 'Custom' };
+  try {
+    savedPresence = (await discordClient?.db?.get('bot:presence', null)) || savedPresence;
+  } catch (_) {}
+
+  const presenceSaved = req.query.presence === '1' ? '<p class="ok">Presence saved & applied.</p>' : '';
+
   res.send(
     layout(
       'Overview',
       `<h1>Overview</h1>
-      <div class="banner"><div class="cap">Status of the chamber<small>Live bot telemetry · 3s refresh</small></div></div>
+      ${presenceSaved}
+      <div class="banner"><div class="cap">Status of the chamber<small>Live bot telemetry</small></div></div>
       <div class="grid grid-2">
         <div class="card">
           <h2>Live status</h2>
@@ -545,26 +566,46 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
             <div class="stat"><div class="v" id="live-guilds">—</div><div class="k">Guilds</div></div>
             <div class="stat"><div class="v" id="live-cmds">—</div><div class="k">Commands</div></div>
           </div>
-          <p class="muted" style="margin-top:12px">Presence <strong id="live-presence">—</strong></p>
+          <p class="muted" style="margin-top:12px">Live presence <strong id="live-presence">—</strong></p>
           <p>Maintenance <span id="live-maint" class="badge">—</span>
              · Database <span id="live-db" class="badge on">—</span></p>
         </div>
         <div class="card">
           <h2>Chamber intel</h2>
-          <p style="margin:0 0 10px;color:var(--text)">Operator notes for <strong>BANORANT CAFE</strong>.</p>
           <ul class="intel">
-            <li><span class="dot"></span> MongoDB stores levels, welcome, AI prefs, polls, and DMs</li>
-            <li><span class="dot"></span> /setlevel posts in level-up with “modified by Yuri”</li>
-            <li><span class="dot"></span> AI persona is edited under the AI tab (up to 12k chars)</li>
-            <li><span class="dot"></span> Maintenance blocks commands for everyone, including owner</li>
-            <li><span class="dot"></span> Use the top nav to move pages — this panel is status only</li>
+            <li><span class="dot"></span> Database: <strong>MongoDB</strong> · levels persist across restarts</li>
+            <li><span class="dot"></span> Level profiles in DB: <strong>${levelUsers}</strong></li>
+            <li><span class="dot"></span> Active polls: <strong>${activePolls}</strong></li>
+            <li><span class="dot"></span> Guilds online: <strong id="intel-guilds">—</strong></li>
+            <li><span class="dot"></span> Edit presence below · also /status in Discord</li>
+            <li><span class="dot"></span> Polls & Giveaways tabs manage live events</li>
           </ul>
-          <p class="muted" style="margin-top:12px">Look inspired by VALORANT agent <strong style="color:var(--text)">Chamber</strong> · not affiliated with Riot Games</p>
         </div>
       </div>
-      <div class="card">
+      <div class="card" style="margin-top:14px">
+        <h2>Bot presence (editable)</h2>
+        <p class="muted">Shows as custom status / activity on the bot. Saved to MongoDB.</p>
+        <form method="POST" action="${path('/dashboard/presence')}" class="row" style="flex-wrap:wrap;align-items:flex-end;gap:12px">
+          <div style="flex:1;min-width:200px">
+            <label class="muted" style="font-size:11px">Status text</label>
+            <input type="text" name="text" maxlength="128" required
+              value="${escapeHtml(savedPresence.text || '')}"
+              placeholder="e.g. Status: grinding ranked with the cafe"/>
+          </div>
+          <div>
+            <label class="muted" style="font-size:11px">Type</label>
+            <select name="type">
+              ${['Custom','Playing','Watching','Listening','Competing'].map((ty) =>
+                `<option value="${ty}" ${ (savedPresence.typeName||'Custom')===ty ? 'selected' : ''}>${ty}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <button class="btn" type="submit">Save presence</button>
+        </form>
+      </div>
+      <div class="card" style="margin-top:14px">
         <h2>Recent logs</h2>
-        <pre id="live-logs" class="logs"></pre>
+        <pre id="live-logs" class="muted" style="white-space:pre-wrap;max-height:180px;overflow:auto;font-size:12px">…</pre>
       </div>
       <script>
       const base = ${JSON.stringify(path('/api/live'))};
@@ -578,6 +619,8 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           document.getElementById('live-uptime').textContent = b.uptime || '—';
           document.getElementById('live-ping').textContent = b.ping ?? '—';
           document.getElementById('live-guilds').textContent = b.guilds ?? '—';
+          var ig = document.getElementById('intel-guilds');
+          if (ig) ig.textContent = b.guilds ?? '—';
           document.getElementById('live-cmds').textContent = b.commands ?? '—';
           document.getElementById('live-presence').textContent = b.presence || '(none)';
           const m = document.getElementById('live-maint');
@@ -586,7 +629,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           const db = document.getElementById('live-db');
           if (db) {
             db.textContent = (b.db || '—').toUpperCase();
-            db.className = 'badge ' + (b.db === 'mongodb' || b.db === 'connected' || b.db === 'firebase' ? 'on' : 'off');
+            db.className = 'badge ' + (b.db === 'mongodb' || b.db === 'connected' ? 'on' : 'off');
           }
           document.getElementById('live-logs').textContent = (d.logs || []).map(function(l) {
             return '[' + new Date(l.t).toLocaleTimeString() + '] ' + l.level + ': ' + l.message;
@@ -599,6 +642,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
     ),
   );
 });
+
 
 app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
   const guildId = getSessionGuildId(req);
@@ -913,6 +957,98 @@ app.post(path('/dashboard/dms/delete'), requireAuth, async (req, res) => {
     if (wantsJson) return res.status(500).json({ ok: false, error: e.message });
     return res.redirect(path('/dashboard/dms'));
   }
+});
+
+
+app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
+  let items = [];
+  try {
+    if (discordClient?.db?.list) {
+      const keys = await discordClient.db.list('giveaway:');
+      for (const k of keys.slice(0, 50)) {
+        const g = await discordClient.db.get(k, null);
+        if (g && typeof g === 'object') items.push({ key: k, ...g });
+      }
+    }
+  } catch (e) {
+    console.error('giveaways list', e);
+  }
+  items.sort((a, b) => (b.endsAt || b.endTime || 0) - (a.endsAt || a.endTime || 0));
+
+  const cards = items.length
+    ? items.map((g) => {
+        const ended = g.ended || g.isEnded;
+        const ends = g.endsAt || g.endTime;
+        const endsLabel = ends
+          ? (typeof ends === 'number' ? new Date(ends).toLocaleString() : String(ends))
+          : '—';
+        const parts = (g.participants || []).length;
+        return `<div class="card">
+          <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <h2 style="text-transform:none;letter-spacing:0;font-size:15px;margin:0">${escapeHtml(g.prize || g.title || g.key)}</h2>
+            <span class="badge ${ended ? 'off' : 'on'}">${ended ? 'ENDED' : 'ACTIVE'}</span>
+          </div>
+          <p class="muted">Ends: ${escapeHtml(endsLabel)} · Entries: ${parts} · Winners: ${g.winnerCount || 1}</p>
+          <div class="row" style="gap:8px;margin-top:10px">
+            ${ended ? '' : `<form method="POST" action="${path('/dashboard/giveaways/end')}" style="display:inline">
+              <input type="hidden" name="key" value="${escapeHtml(g.key)}"/>
+              <button class="btn" type="submit">End</button></form>`}
+            <form method="POST" action="${path('/dashboard/giveaways/delete')}" style="display:inline" onsubmit="return confirm('Delete giveaway from Discord + MongoDB?')">
+              <input type="hidden" name="key" value="${escapeHtml(g.key)}"/>
+              <button class="btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div class="card"><p class="muted">No giveaways in database.</p></div>';
+
+  res.send(
+    layout(
+      'Giveaways',
+      `<h1>Giveaways</h1>
+      <div class="banner"><div class="cap">Giveaway chamber<small>End or delete · removes MongoDB key</small></div></div>
+      ${cards}`,
+      'giveaways',
+    ),
+  );
+});
+
+app.post(path('/dashboard/giveaways/delete'), requireAuth, async (req, res) => {
+  const key = String(req.body.key || '');
+  if (!key.startsWith('giveaway:') || !discordClient?.db) {
+    return res.redirect(path('/dashboard/giveaways'));
+  }
+  try {
+    const g = await discordClient.db.get(key, null);
+    if (g?.channelId && g?.messageId) {
+      const ch = await discordClient.channels.fetch(g.channelId).catch(() => null);
+      const msg = ch ? await ch.messages.fetch(g.messageId).catch(() => null) : null;
+      if (msg) await msg.delete().catch(() => {});
+    }
+    await discordClient.db.delete(key);
+  } catch (e) {
+    console.error('gw delete', e);
+  }
+  res.redirect(path('/dashboard/giveaways'));
+});
+
+app.post(path('/dashboard/giveaways/end'), requireAuth, async (req, res) => {
+  const key = String(req.body.key || '');
+  if (!key.startsWith('giveaway:') || !discordClient?.db) {
+    return res.redirect(path('/dashboard/giveaways'));
+  }
+  try {
+    const g = await discordClient.db.get(key, null);
+    if (g && !g.ended) {
+      g.ended = true;
+      g.isEnded = true;
+      g.endedAt = new Date().toISOString();
+      await discordClient.db.set(key, g);
+    }
+  } catch (e) {
+    console.error('gw end', e);
+  }
+  res.redirect(path('/dashboard/giveaways'));
 });
 
 app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {

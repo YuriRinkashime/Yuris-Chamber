@@ -4,22 +4,38 @@ import { getLevelingConfig, getUserLevelData, saveLevelingConfig } from './level
 import { getUserLevelPrefix } from '../../utils/database/keys.js';
 
 async function listLevelUserIds(client, guildId) {
-    if (!client.db?.list) return [];
-
-    const prefixes = [getUserLevelPrefix(guildId), `${guildId}:leveling:users:`];
+    if (!client.db) return [];
     const userIds = new Set();
+    const prefixes = [
+      getUserLevelPrefix(guildId),
+      `guild:${guildId}:leveling:users:`,
+      `${guildId}:leveling:users:`,
+    ];
 
-    for (const prefix of prefixes) {
-        let keys = await client.db.list(prefix).catch(() => []);
-        if (!Array.isArray(keys)) {
-            keys = typeof keys === 'object' && keys !== null ? Object.keys(keys) : [];
+    // Prefer prefix list; also full scan fallback (Mongo)
+    let keys = [];
+    if (typeof client.db.list === 'function') {
+      for (const prefix of prefixes) {
+        const part = await client.db.list(prefix).catch(() => []);
+        if (Array.isArray(part)) keys.push(...part);
+      }
+      if (keys.length === 0) {
+        const all = await client.db.list('guild:').catch(() => []);
+        if (Array.isArray(all)) {
+          keys = all.filter(
+            (k) =>
+              typeof k === 'string' &&
+              (k.includes(`:${guildId}:leveling:users:`) ||
+                k.startsWith(`guild:${guildId}:leveling:users:`)),
+          );
         }
+      }
+    }
 
-        for (const key of keys) {
-            if (!key.startsWith(prefix)) continue;
-            const userId = key.slice(prefix.length);
-            if (/^\d{17,19}$/.test(userId)) userIds.add(userId);
-        }
+    for (const key of keys) {
+      if (typeof key !== 'string') continue;
+      const m = key.match(/leveling:users:(\d{17,20})$/);
+      if (m) userIds.add(m[1]);
     }
 
     return [...userIds];
