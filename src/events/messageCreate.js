@@ -57,6 +57,25 @@ export default {
 
       if (!message.guild) return;
 
+      // @bot during maintenance → reply with maintenance message (commands also blocked elsewhere)
+      try {
+        const mentioned =
+          message.mentions?.users?.has(client.user.id) ||
+          message.mentions?.repliedUser?.id === client.user.id;
+        if (mentioned && isMaintenanceMode() && !isBotOwner(message.author.id)) {
+          const embed = createEmbed({
+            title: '🛠️ Maintenance',
+            description:
+              getBotMessage('maintenanceMode') ||
+              'Bot is under maintenance, all commands has been disabled. Please wait for the bot to online.',
+            color: 'error',
+          });
+          await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
+        }
+      } catch (_) {}
+
+
             // AI: reply-to-bot OR @mention the bot → answer with AI
       try {
         const contentTrim = message.content?.trim() || '';

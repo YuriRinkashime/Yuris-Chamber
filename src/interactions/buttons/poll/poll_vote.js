@@ -1,4 +1,5 @@
 import { MessageFlags } from 'discord.js';
+import { isMaintenanceModeRuntime, getMaintenanceMessage } from '../../../services/runtimeSettings.js';
 import {
   getPoll,
   savePoll,
@@ -40,6 +41,16 @@ export default {
     if (!poll) {
       return interaction.reply({
         content: 'This poll was deleted.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+
+    if (isMaintenanceModeRuntime()) {
+      return interaction.reply({
+        content:
+          '🛠️ Poll voting is **paused** — bot is under maintenance.\n' +
+          (getMaintenanceMessage() || 'Please try again when the bot is back online.'),
         flags: MessageFlags.Ephemeral,
       });
     }

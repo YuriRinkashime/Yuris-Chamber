@@ -484,7 +484,7 @@ export function validateConfig(config) {
     logger.debug('TOKEN exists:', !!process.env.TOKEN);
     logger.debug('CLIENT_ID exists:', !!process.env.CLIENT_ID);
     logger.debug('GUILD_ID exists:', !!process.env.GUILD_ID);
-    logger.debug('POSTGRES_HOST exists:', !!process.env.POSTGRES_HOST);
+    logger.debug('MONGODB_URI exists:', !!(process.env.MONGODB_URI||process.env.MONGO_URI));
     logger.debug('NODE_ENV:', process.env.NODE_ENV);
   }
 
@@ -496,14 +496,11 @@ export function validateConfig(config) {
     errors.push("Client ID is required (CLIENT_ID environment variable)");
   }
 
-    if (process.env.NODE_ENV === 'production') {
-    const hasFirebase =
-      process.env.DATABASE_DRIVER === 'firebase' ||
-      Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-    if (!hasFirebase) {
+  if (process.env.NODE_ENV === 'production') {
+    const hasMongo = Boolean(process.env.MONGODB_URI || process.env.MONGO_URI);
+    if (!hasMongo) {
       errors.push(
-        'Firebase is required in production (set FIREBASE_SERVICE_ACCOUNT and DATABASE_DRIVER=firebase)',
+        'MongoDB is required in production (set MONGODB_URI)',
       );
     }
   }

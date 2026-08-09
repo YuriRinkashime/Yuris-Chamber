@@ -5,6 +5,7 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { logger } from '../utils/logger.js';
+import { isMaintenanceModeRuntime } from './runtimeSettings.js';
 
 const ACTIVE_KEY = 'polls:active';
 const ENDED_KEY = 'polls:ended';
@@ -294,7 +295,11 @@ export function buildPollEmbed(poll, { final = false } = {}) {
       },
       {
         name: 'Status',
-        value: reveal ? '🔒 Results in' : '🗳️ Voting open',
+        value: reveal
+          ? '🔒 Results in'
+          : isMaintenanceModeRuntime()
+            ? '🛠️ Paused · maintenance'
+            : '🗳️ Voting open',
         inline: true,
       },
     )
