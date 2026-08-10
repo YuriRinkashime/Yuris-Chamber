@@ -64,6 +64,12 @@ export default {
         .setName('reset')
         .setDescription('Clear YOUR chat history')
         .setRequired(false),
+    )
+    .addAttachmentOption((o) =>
+      o
+        .setName('image')
+        .setDescription('Photo or GIF for the AI to look at')
+        .setRequired(false),
     ),
 
   category: 'utility',
@@ -77,6 +83,16 @@ export default {
     const userId = interaction.user.id;
     const reset = interaction.options.getBoolean('reset') || false;
     const userMessage = interaction.options.getString('message', true);
+    const attachment = interaction.options.getAttachment('image');
+    let imageUrls = [];
+    let mediaNote = '';
+    if (attachment?.url) {
+      imageUrls = [attachment.url];
+      const name = (attachment.name || '').toLowerCase();
+      const ct = (attachment.contentType || '').toLowerCase();
+      if (ct.includes('gif') || name.endsWith('.gif')) mediaNote = `[User sent a GIF: ${attachment.url}]`;
+      else mediaNote = `[User sent a photo/image: ${attachment.url}]`;
+    }
 
     if (reset) {
       await clearUserAiHistory(client, guildId, userId);
@@ -142,11 +158,16 @@ export default {
         `\nTo mention someone else, only use a real numeric Discord ID inside <@...>.` +
         `\nNever write the text USER_ID, <@USER_ID>, or @USER_ID as a placeholder.`;
 
+      let finalMsg = userMessage;
+      if (mediaNote) {
+        finalMsg = userMessage + '\n\n' + mediaNote + '\n(React to the photo/GIF — describe what you see when relevant.)';
+      }
       let answer = await generateReply({
         systemInstructions,
-        userMessage,
+        userMessage: finalMsg,
         model: config.model,
         history,
+        imageUrls,
       });
 
       answer = fixMentions(answer, userId);

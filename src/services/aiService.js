@@ -212,6 +212,26 @@ function fixAiMentions(text, userId) {
   return out;
 }
 
+export function formatMediaContext(mediaList = []) {
+  const lines = [];
+  for (const m of mediaList || []) {
+    const u = m.url || m;
+    if (!u) continue;
+    const ct = String(m.contentType || '').toLowerCase();
+    const low = String(u).toLowerCase();
+    const isGif =
+      ct.includes('gif') ||
+      /\.gif(\?|$)/i.test(low) ||
+      /tenor\.|giphy\.|klipy\./i.test(low);
+    const isVid =
+      ct.startsWith('video') || /\.(mp4|webm|mov)(\?|$)/i.test(low);
+    if (isVid) lines.push(`[User sent a video: ${u}]`);
+    else if (isGif) lines.push(`[User sent a GIF: ${u}]`);
+    else lines.push(`[User sent a photo/image: ${u}]`);
+  }
+  return lines.join('\n');
+}
+
 export async function generateDmReply(client, userId, userMessage) {
   const guildId = process.env.GUILD_ID;
   const config = await getAiConfig(client, guildId);
@@ -245,7 +265,8 @@ export async function generateDmReply(client, userId, userMessage) {
 
   if (/\b(personal(ize)?|custom(ize)?|be my ai)\b/i.test(lower)) {
     await saveUserAiPrefs(client, guildId, userId, {
-      customStyle: String(userMessage).slice(0, 800) });
+      customStyle: String(userMessage).slice(0, 800),
+    });
   }
   if (/\b(reset (style|personality|ai)|default yuri|normal mode)\b/i.test(lower)) {
     await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
@@ -253,6 +274,38 @@ export async function generateDmReply(client, userId, userMessage) {
 
   const history = await getMergedAiHistory(client, userId);
   const serverCtx = await buildUserServerContext(client, userId);
+
+  let imageUrls = [];
+  let mediaNote = '';
+  try {
+    const { getThread } = await import('./dmInboxService.js');
+    const thread = await getThread(client, userId);
+    const recent = (thread.messages || []).slice(-8);
+    const media = [];
+    for (const m of recent) {
+      if (m.from === 'user' && Array.isArray(m.media)) media.push(...m.media);
+    }
+    const lastUser = [...recent].reverse().find((m) => m.from === 'user');
+    if (lastUser?.content) {
+      const urls = String(lastUser.content).match(/https?:\/\/[^\s]+/gi) || [];
+      for (const u of urls) {
+        if (/\.(png|jpe?g|gif|webp)(\?|$)/i.test(u) || /tenor\.|giphy\.|klipy\.|discordapp/i.test(u)) {
+          media.push({ url: u, contentType: 'image/gif' });
+        }
+      }
+    }
+    imageUrls = [...new Set(media.map((m) => m.url).filter(Boolean))].slice(-4);
+    mediaNote = formatMediaContext(media.slice(-4));
+  } catch (_) {}
+
+  let userMsg = String(userMessage || '').slice(0, 1500);
+  if (mediaNote) {
+    userMsg =
+      (userMsg ? userMsg + '\n\n' : '') +
+      mediaNote +
+      '\n(React to the photo/GIF when relevant — describe what you see.)';
+  }
+  if (!userMsg.trim()) userMsg = mediaNote || 'Hello';
 
   const systemInstructions = await buildSystemInstructions(
     client,
@@ -262,15 +315,18 @@ export async function generateDmReply(client, userId, userMessage) {
       `\n\nYou are in a private DM as Yuri for BANORANT CAFE.` +
       `\n${serverCtx}` +
       `\nUse the conversation history. Do not re-ask language preference if already set.` +
-      `\nBe natural, chill, slightly nonchalant Gen Z. Remember EVERYTHING THIS user already told you in history. Never mix other users. Prefer concrete answers over filler. If unsure, ask one short question.` +
-      `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output the text USER_ID or <@USER_ID>. Always use real Discord mention syntax <@${userId}> when addressing them.`,
+      `\nBe natural, chill, slightly nonchalant Gen Z. Remember EVERYTHING THIS user already told you in history. Never mix other users.` +
+      `\nWhen the user sends photos or GIFs, react to them specifically.` +
+      `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output USER_ID.`,
   );
 
   let answer = await generateReply({
     systemInstructions,
-    userMessage: String(userMessage).slice(0, 1500),
+    userMessage: userMsg,
     model: config.model,
-    history });
+    history,
+    imageUrls,
+  });
 
   const maxLen = config.maxReplyLength || 1800;
   if (answer.length > maxLen) answer = answer.slice(0, maxLen - 3) + '...';
@@ -279,12 +335,13 @@ export async function generateDmReply(client, userId, userMessage) {
 
   await saveDmAiHistory(client, userId, [
     ...history,
-    { role: 'user', parts: [{ text: String(userMessage).slice(0, 1500) }] },
+    { role: 'user', parts: [{ text: userMsg.slice(0, 1500) }] },
     { role: 'model', parts: [{ text: answer }] },
   ]);
 
   return answer;
 }
+
 
 function historyToOpenAI(history) {
   return (history || []).map((item) => {
@@ -294,11 +351,23 @@ function historyToOpenAI(history) {
   });
 }
 
+function buildUserContent(userMessage, imageUrls = []) {
+  const urls = (imageUrls || []).filter(Boolean).slice(0, 4);
+  if (!urls.length) return userMessage;
+  // OpenAI-compatible multimodal
+  const parts = [{ type: 'text', text: String(userMessage || 'What is in this image?') }];
+  for (const url of urls) {
+    parts.push({ type: 'image_url', image_url: { url: String(url) } });
+  }
+  return parts;
+}
+
 async function generateOpenAICompatible({
   systemInstructions,
   userMessage,
   model,
   history,
+  imageUrls,
   apiKey,
   baseUrl,
   label }) {
@@ -307,23 +376,40 @@ async function generateOpenAICompatible({
   const messages = [
     { role: 'system', content: systemInstructions },
     ...historyToOpenAI(history || []),
-    { role: 'user', content: userMessage },
+    { role: 'user', content: buildUserContent(userMessage, imageUrls) },
   ];
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}` },
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
       model: model || defaultModel(),
       messages,
       max_tokens: 512,
-      temperature: 0.7 }) });
+      temperature: 0.7,
+    }),
+  });
 
   const raw = await res.text();
   if (!res.ok) {
     logger.error(`${label} error:`, raw);
+    // Fallback: retry text-only if vision rejected
+    if (imageUrls?.length && (res.status === 400 || res.status === 422 || /image|vision|multimodal/i.test(raw))) {
+      logger.warn(`${label}: vision not supported by model — retrying text-only with media description`);
+      return generateOpenAICompatible({
+        systemInstructions,
+        userMessage,
+        model,
+        history,
+        imageUrls: [],
+        apiKey,
+        baseUrl,
+        label,
+      });
+    }
     if (res.status === 429) throw new Error(`${label} rate-limited. Wait a bit.`);
     if (res.status === 401) throw new Error(`${label} key invalid.`);
     throw new Error(`${label} request failed (${res.status})`);
@@ -337,38 +423,50 @@ async function generateOpenAICompatible({
 
 export async function generateReply(opts) {
   const p = provider();
+  const imageUrls = opts.imageUrls || [];
 
   if (p === 'naga') {
     return generateOpenAICompatible({
       ...opts,
+      imageUrls,
       apiKey: process.env.NAGA_API_KEY || process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.naga.ac/v1',
-      label: 'Naga' });
+      label: 'Naga',
+    });
   }
 
   if (p === 'openai') {
     return generateOpenAICompatible({
       ...opts,
+      imageUrls,
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.openai.com/v1',
-      label: 'OpenAI' });
+      label: 'OpenAI',
+    });
   }
 
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not set');
   const model = opts.model || 'gemini-2.0-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const userParts = [{ text: opts.userMessage }];
+  // Gemini inline image via URL not always supported; include URL in text
+  if (imageUrls.length) {
+    userParts[0].text +=
+      '\n\n' +
+      imageUrls.map((u) => `Image URL: ${u}`).join('\n') +
+      '\nDescribe / react to the image if you can.';
+  }
   const body = {
     system_instruction: { parts: [{ text: opts.systemInstructions }] },
-    contents: [
-      ...(opts.history || []),
-      { role: 'user', parts: [{ text: opts.userMessage }] },
-    ],
-    generationConfig: { maxOutputTokens: 512, temperature: 0.7 } };
+    contents: [...(opts.history || []), { role: 'user', parts: userParts }],
+    generationConfig: { maxOutputTokens: 512, temperature: 0.7 },
+  };
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body) });
+    body: JSON.stringify(body),
+  });
   const errText = await res.text();
   if (!res.ok) {
     logger.error('Gemini error:', errText);

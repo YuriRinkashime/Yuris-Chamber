@@ -1515,39 +1515,30 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
-
   function mediaHtml(m) {
     let html = '';
     for (const med of m.media || []) {
       const u = med.url || '';
+      if (!u) continue;
       const ct = (med.contentType || '').toLowerCase();
       const low = u.toLowerCase();
-      const isGif =
-        ct.includes('gif') ||
-        /\.gif(\?|$)/i.test(low) ||
-        /tenor\.|giphy\.|klipy\./i.test(low);
-      const isImg =
-        ct.startsWith('image') ||
-        isGif ||
-        /\.(png|jpe?g|webp|gif)(\?|$)/i.test(low);
-      if (isImg && u) {
+      const isGif = ct.includes('gif') || /\.gif(\?|$)/i.test(low) || /tenor\.|giphy\.|klipy\./i.test(low);
+      const isImg = ct.startsWith('image') || isGif || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(low);
+      if (isImg) {
         html += `<div style="margin-top:6px"><a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>`;
-      } else if ((ct.startsWith('video') || /\.(mp4|webm|mov)(\?|$)/i.test(low)) && u) {
+      } else if (ct.startsWith('video') || /\.(mp4|webm|mov)(\?|$)/i.test(low)) {
         html += `<div style="margin-top:6px"><video src="${esc(u)}" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>`;
-      } else if (u) {
+      } else {
         html += `<div style="margin-top:6px"><a href="${esc(u)}" target="_blank">${esc(med.name || 'file')}</a></div>`;
       }
     }
     return html;
   }
 
-  let cards = '';
-  if (listErr) {
-    cards = `<div class="card"><p class="err">Failed to load DMs: ${esc(listErr)}</p></div>`;
-  } else if (!threads.length) {
-    cards = `<div class="card"><p class="muted">No DMs yet. When someone messages the bot, threads appear here.</p></div>`;
-  } else {
-    for (const t of threads) {
+  function renderCards(list) {
+    if (listErr) return `<div class="card"><p class="err">Failed to load DMs: ${esc(listErr)}</p></div>`;
+    if (!list.length) return `<div class="card"><p class="muted">No DMs yet.</p></div>`;
+    return list.map((t) => {
       const displayName = t.userName
         ? `@${t.userName}`
         : t.userTag
@@ -1555,10 +1546,8 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           : 'user';
       const bubbles = (t.messages || [])
         .map((m) => {
-          const who =
-            m.from === 'user' ? displayName : m.from === 'ai' ? 'AI' : 'You';
-          const cls =
-            m.from === 'user' ? 'user' : m.from === 'ai' ? 'ai' : 'owner';
+          const who = m.from === 'user' ? displayName : m.from === 'ai' ? 'AI' : 'You';
+          const cls = m.from === 'user' ? 'user' : m.from === 'ai' ? 'ai' : 'owner';
           return `<div class="bubble ${cls}"><div class="who">${esc(who)}</div>${m.content ? esc(m.content) : ''}${mediaHtml(m)}</div>`;
         })
         .join('');
@@ -1567,19 +1556,17 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         const left = Math.max(0, Math.floor((t.autoAiAt - Date.now()) / 1000));
         badge = `<span class="badge off">Auto-AI ${Math.floor(left / 60)}m ${left % 60}s</span>`;
       }
-      cards += `<div class="card dm-card">
+      return `<div class="card dm-card" data-card="${esc(t.userId)}">
         <div class="dm-head"><h2>${esc(displayName)}</h2><div class="row">${badge}
           <form method="POST" action="${path('/dashboard/dms/delete')}" style="display:inline" onsubmit="return confirm('Remove from dashboard only?')">
-            <input type="hidden" name="userId" value="${esc(t.userId)}"/>
-            <button class="btn danger" type="submit" style="padding:6px 10px;font-size:11px">Delete</button>
-          </form>
-        </div></div>
+            <input type="hidden" name="userId" value="${esc(t.userId)}"/><button class="btn danger" type="submit" style="padding:6px 10px;font-size:11px">Delete</button>
+          </form></div></div>
         <div class="dm-thread" data-uid="${esc(t.userId)}">${bubbles}</div>
         <div class="dm-actions">
           <form method="POST" action="${path('/dashboard/dms/reply')}">
             <input type="hidden" name="userId" value="${esc(t.userId)}"/>
             <input type="hidden" name="mode" value="human"/>
-            <textarea name="content" placeholder="Type your reply…" required></textarea>
+            <textarea name="content" data-uid="${esc(t.userId)}" placeholder="Type your reply…" required></textarea>
             <div class="row" style="margin-top:10px;gap:8px">
               <button class="btn" type="submit">Send my words</button>
             </div>
@@ -1592,15 +1579,26 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           </form>
         </div>
       </div>`;
-    }
+    }).join('');
   }
+
+  const initialJson = JSON.stringify(
+    threads.map((t) => ({
+      userId: t.userId,
+      userTag: t.userTag,
+      userName: t.userName,
+      status: t.status,
+      messages: t.messages || [],
+      autoAiAt: t.autoAiAt,
+    })),
+  ).replace(/</g, '\\u003c');
 
   res.send(
     layout(
       'DMs',
       `<h1>Bot DMs</h1>
-      <p class="muted">Server-rendered · auto-refresh every 10s</p>
-      <div id="dm-list">${cards}</div>
+      <p class="muted">Scroll stays put · only snaps to latest if you were already at the bottom</p>
+      <div id="dm-list">${renderCards(threads)}</div>
       <style>
         #dm-list{display:flex;flex-direction:column;gap:14px}
         .dm-card{border-radius:10px;padding:16px}
@@ -1615,8 +1613,117 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         .dm-actions textarea{min-height:80px;width:100%;box-sizing:border-box;border-radius:8px}
       </style>
       <script>
-        document.querySelectorAll('.dm-thread').forEach(function(el){ el.scrollTop = el.scrollHeight; });
-        setTimeout(function(){ location.reload(); }, 10000);
+      (function(){
+        const api = ${JSON.stringify(path('/api/dms'))};
+        const scrollMap = {};
+        const nearBottom = {};
+        const draftMap = {};
+        let lastFp = '';
+        let pauseUntil = 0;
+
+        function esc(s){
+          return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function mediaHtml(m){
+          let html = '';
+          (m.media||[]).forEach(function(med){
+            const u = med.url||'';
+            if(!u) return;
+            const ct=(med.contentType||'').toLowerCase();
+            const low=u.toLowerCase();
+            const isGif=ct.indexOf('gif')>=0||/\\.gif(\\?|$)/i.test(low)||/tenor\\.|giphy\\.|klipy\\./i.test(low);
+            const isImg=ct.indexOf('image')===0||isGif||/\\.(png|jpe?g|webp|gif)(\\?|$)/i.test(low);
+            if(isImg) html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" style="max-width:100%;max-height:280px;border-radius:8px" loading="lazy"/></a></div>';
+            else if(ct.indexOf('video')===0||/\\.(mp4|webm|mov)(\\?|$)/i.test(low)) html += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:260px"></video></div>';
+            else html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank">'+esc(med.name||'file')+'</a></div>';
+          });
+          return html;
+        }
+        function saveState(){
+          document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
+            const uid = el.getAttribute('data-uid');
+            scrollMap[uid] = el.scrollTop;
+            nearBottom[uid] = (el.scrollHeight - el.scrollTop - el.clientHeight) < 80;
+          });
+          document.querySelectorAll('textarea[data-uid]').forEach(function(el){
+            draftMap[el.getAttribute('data-uid')] = el.value;
+          });
+        }
+        function isTyping(){
+          const a = document.activeElement;
+          return a && a.tagName==='TEXTAREA' && a.hasAttribute('data-uid');
+        }
+        function render(threads){
+          const box = document.getElementById('dm-list');
+          if(!threads.length){
+            box.innerHTML = '<div class="card"><p class="muted">No DMs yet.</p></div>';
+            return;
+          }
+          box.innerHTML = threads.map(function(t){
+            const displayName = t.userName ? ('@'+t.userName) : (t.userTag ? ('@'+String(t.userTag).split('#')[0]) : 'user');
+            const hist = (t.messages||[]).map(function(m){
+              const who = m.from==='user' ? displayName : (m.from==='ai'?'AI':'You');
+              const cls = m.from==='user'?'user':(m.from==='ai'?'ai':'owner');
+              return '<div class="bubble '+cls+'"><div class="who">'+esc(who)+'</div>'+(m.content?esc(m.content):'')+mediaHtml(m)+'</div>';
+            }).join('');
+            let badge = '<span class="badge on">'+esc(t.status||'open')+'</span>';
+            if(t.autoAiAt && t.status==='waiting_owner'){
+              const left = Math.max(0, Math.floor((t.autoAiAt - Date.now())/1000));
+              badge = '<span class="badge off">Auto-AI '+Math.floor(left/60)+'m '+(left%60)+'s</span>';
+            }
+            return '<div class="card dm-card" data-card="'+esc(t.userId)+'">'+
+              '<div class="dm-head"><h2>'+esc(displayName)+'</h2><div class="row">'+badge+
+              '<form method="POST" action="${path('/dashboard/dms/delete')}" style="display:inline" onsubmit="return confirm(\\'Remove?\\')"><input type="hidden" name="userId" value="'+esc(t.userId)+'"/><button class="btn danger" type="submit" style="padding:6px 10px;font-size:11px">Delete</button></form></div></div>'+
+              '<div class="dm-thread" data-uid="'+esc(t.userId)+'">'+hist+'</div>'+
+              '<div class="dm-actions"><form method="POST" action="${path('/dashboard/dms/reply')}"><input type="hidden" name="userId" value="'+esc(t.userId)+'"/><input type="hidden" name="mode" value="human"/>'+
+              '<textarea name="content" data-uid="'+esc(t.userId)+'" placeholder="Type your reply…" required></textarea>'+
+              '<div class="row" style="margin-top:10px"><button class="btn" type="submit">Send my words</button></div></form>'+
+              '<form method="POST" action="${path('/dashboard/dms/reply')}" style="margin-top:8px"><input type="hidden" name="userId" value="'+esc(t.userId)+'"/><input type="hidden" name="mode" value="ai"/><input type="hidden" name="content" value=""/>'+
+              '<button class="btn secondary" type="submit">AI reply</button></form></div></div>';
+          }).join('');
+          document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
+            const uid = el.getAttribute('data-uid');
+            if(nearBottom[uid]) el.scrollTop = el.scrollHeight;
+            else if(scrollMap[uid] != null) el.scrollTop = scrollMap[uid];
+            // first visit: start at bottom once
+            else el.scrollTop = el.scrollHeight;
+          });
+          document.querySelectorAll('textarea[data-uid]').forEach(function(el){
+            const uid = el.getAttribute('data-uid');
+            if(draftMap[uid] != null) el.value = draftMap[uid];
+            el.addEventListener('input', function(){ draftMap[uid]=el.value; pauseUntil=Date.now()+20000; });
+            el.addEventListener('focus', function(){ pauseUntil=Date.now()+20000; });
+          });
+        }
+        async function softRefresh(){
+          if(isTyping() && Date.now() < pauseUntil) return;
+          saveState();
+          try{
+            const r = await fetch(api, { credentials:'same-origin', cache:'no-store' });
+            if(!r.ok) return;
+            const d = await r.json();
+            const threads = d.threads || [];
+            const fp = JSON.stringify(threads.map(function(t){ return [t.userId,(t.messages||[]).length,t.status,t.autoAiAt]; }));
+            if(fp === lastFp) return;
+            lastFp = fp;
+            render(threads);
+          }catch(e){}
+        }
+        // first paint already SSR — mark near-bottom true for initial threads
+        document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
+          el.scrollTop = el.scrollHeight;
+          nearBottom[el.getAttribute('data-uid')] = true;
+          el.addEventListener('scroll', function(){
+            const uid = el.getAttribute('data-uid');
+            scrollMap[uid] = el.scrollTop;
+            nearBottom[uid] = (el.scrollHeight - el.scrollTop - el.clientHeight) < 80;
+          });
+        });
+        document.querySelectorAll('textarea[data-uid]').forEach(function(el){
+          el.addEventListener('input', function(){ draftMap[el.getAttribute('data-uid')]=el.value; pauseUntil=Date.now()+20000; });
+        });
+        setInterval(softRefresh, 5000);
+      })();
       </script>`,
       'dms',
     ),
@@ -1650,25 +1757,13 @@ app.post(path('/dashboard/dms/reply'), requireAuth, async (req, res) => {
     let text = content;
 
     if (mode === 'ai') {
-      const guildId = getSessionGuildId(req) || DEFAULT_GUILD_ID;
-      const config = await getAiConfig(discordClient, guildId);
+      const { generateDmReply } = await import('./services/aiService.js');
       const thread = await getThread(discordClient, userId);
       const lastUser = [...(thread.messages || [])]
         .reverse()
         .find((m) => m.from === 'user');
       const userMessage = lastUser?.content || content || 'Hello';
-
-      text = await generateReply({
-        systemInstructions: await buildSystemInstructions(
-          discordClient,
-          guildId,
-          userId,
-          (config.systemInstructions || '') + '\n\nPrivate DM as Yuri. Short.',
-        ),
-        userMessage,
-        model: config.model,
-        history: [],
-      });
+      text = await generateDmReply(discordClient, userId, userMessage);
       if (text.length > 1800) text = text.slice(0, 1800) + '...';
     }
 
