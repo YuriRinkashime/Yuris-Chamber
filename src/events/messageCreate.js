@@ -134,162 +134,208 @@ export default {
       } catch (_) {}
 
 
-            // AI: reply-to-bot OR @mention the bot → answer with AI
+            // AI: reply-to-bot OR @mention the bot → answer with AI (+ media from reply target)
       try {
         const contentTrim = message.content?.trim() || '';
-        if (contentTrim) {
-          let triggered = false;
+        const hasOwnMedia =
+          (message.attachments?.size || 0) > 0 ||
+          (message.embeds || []).some((e) => e.image || e.thumbnail || e.video);
 
-          // 1) User replied to any message from this bot
-          if (message.reference?.messageId) {
-            const ref = await message.channel.messages
-              .fetch(message.reference.messageId)
-              .catch(() => null);
-            if (ref && ref.author?.id === client.user.id) {
-              triggered = true;
-            }
-          }
+        let triggered = false;
+        let refMessage = null;
 
-          // 2) User @mentioned the bot
-          if (
-            message.mentions?.users?.has(client.user.id) ||
-            message.mentions?.repliedUser?.id === client.user.id
-          ) {
+        // Resolve reply target early (any message — not only bot)
+        if (message.reference?.messageId) {
+          refMessage = await message.channel.messages
+            .fetch(message.reference.messageId)
+            .catch(() => null);
+          if (refMessage && refMessage.author?.id === client.user.id) {
             triggered = true;
           }
+        }
 
-          if (triggered) {
-            const {
-              getAiConfig,
-              generateReply,
-              getUserAiHistory,
-              saveUserAiHistory,
-              buildSystemInstructions,
-              saveUserAiPrefs,
-            } = await import('../services/aiService.js');
+        // @mention the bot
+        if (
+          message.mentions?.users?.has(client.user.id) ||
+          message.mentions?.repliedUser?.id === client.user.id
+        ) {
+          triggered = true;
+        }
 
-            const guildId = message.guild.id;
-            const userId = message.author.id;
-            const config = await getAiConfig(client, guildId);
+        // Need text and/or media + a trigger
+        if (triggered && (contentTrim || hasOwnMedia || refMessage)) {
+          const {
+            getAiConfig,
+            generateReply,
+            getUserAiHistory,
+            saveUserAiHistory,
+            buildSystemInstructions,
+            saveUserAiPrefs,
+            formatMediaContext,
+          } = await import('../services/aiService.js');
 
-            if (config.enabled) {
-              // Strip bot mention from text so the model doesn't see raw <@botid>
-              let userMessage = contentTrim
-                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-                .trim()
-                .slice(0, 1500);
-              if (!userMessage) userMessage = 'hey';
+          const guildId = message.guild.id;
+          const userId = message.author.id;
+          const config = await getAiConfig(client, guildId);
 
-              const lower = userMessage.toLowerCase();
+          if (config.enabled) {
+            let userMessage = contentTrim
+              .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+              .trim()
+              .slice(0, 1500);
 
-              if (/\b(bisaya|cebuano)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
-                await saveUserAiPrefs(client, guildId, userId, { language: 'ceb' });
-              }
-              if (/\b(tagalog|filipino)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
-                await saveUserAiPrefs(client, guildId, userId, { language: 'tl' });
-              }
-              if (/\b(english)\b/i.test(userMessage) && /\b(yes|please|from now|bet|go)\b/i.test(lower)) {
-                await saveUserAiPrefs(client, guildId, userId, { language: 'en' });
-              }
-              if (/\b(personal(ize)?|custom(ize)?|be my ai)\b/i.test(lower)) {
-                await saveUserAiPrefs(client, guildId, userId, {
-                  customStyle: userMessage.slice(0, 800),
-                });
-              }
-              if (/\b(reset (style|personality|ai)|default yuri)\b/i.test(lower)) {
-                await saveUserAiPrefs(client, guildId, userId, { customStyle: null });
-              }
-
-              // Optional: "reply in #channel" / "message me in #channel"
-              let targetChannel = message.channel;
-              const chMention = userMessage.match(/<#(\d{17,20})>/);
-              const wantsOtherChannel =
-                /\b(reply (me )?(in|at|on)|answer (me )?(in|at|on)|talk (to me )?(in|at|on)|message me (in|at|on)|go to)\b/i.test(
-                  lower,
-                ) && chMention;
-
-              if (wantsOtherChannel) {
-                const dest = await message.guild.channels
-                  .fetch(chMention[1])
-                  .catch(() => null);
-                if (dest?.isTextBased?.()) {
-                  const me = message.guild.members.me;
-                  const perms = dest.permissionsFor(me);
-                  if (perms?.has(['ViewChannel', 'SendMessages'])) {
-                    targetChannel = dest;
-                  }
+            // Collect media from THIS message + replied message (multi-task context)
+            const media = [];
+            const pushAtt = (att) => {
+              if (!att) return;
+              media.push({
+                url: att.url || att.proxyURL,
+                name: att.name || 'file',
+                contentType: att.contentType || '',
+              });
+            };
+            const pushFromMsg = (m) => {
+              if (!m) return;
+              for (const a of m.attachments?.values?.() || []) pushAtt(a);
+              for (const emb of m.embeds || []) {
+                const u = emb.image?.url || emb.thumbnail?.url || emb.video?.url || emb.url;
+                if (u) {
+                  media.push({
+                    url: u,
+                    name: 'embed',
+                    contentType: emb.video ? 'video/mp4' : 'image/png',
+                  });
                 }
               }
-
-              const history = await getUserAiHistory(client, guildId, userId);
-              let systemInstructions = await buildSystemInstructions(
-                client,
-                guildId,
-                userId,
-                config.systemInstructions,
-              );
-              systemInstructions +=
-                `\n\nCurrent speaker: ${message.author.username} (ID ${userId}). ` +
-                `They are chatting in #${message.channel.name}. ` +
-                `To mention them write <@${userId}>. Never write USER_ID as a placeholder. ` +
-                `Reply naturally — more than one word when it fits. Avoid only saying "got it".`;
-
-              if (targetChannel.id !== message.channel.id) {
-                systemInstructions +=
-                  `\nThey asked you to continue in #${targetChannel.name}. Answer their question fully; the bot will post there.`;
+              const urls = String(m.content || '').match(/https?:\/\/[^\s]+/gi) || [];
+              for (const u of urls) {
+                if (
+                  /\.(png|jpe?g|gif|webp)(\?|$)/i.test(u) ||
+                  /tenor\.|giphy\.|klipy\.|discordapp/i.test(u)
+                ) {
+                  media.push({ url: u, name: 'link', contentType: 'image/gif' });
+                }
               }
+            };
+            pushFromMsg(message);
+            pushFromMsg(refMessage);
 
-              let answer = await generateReply({
-                systemInstructions,
-                userMessage,
-                model: config.model,
-                history,
-              });
-
-              answer = String(answer || '')
-                .replace(/<@USER_ID>/gi, `<@${userId}>`)
-                .replace(/@USER_ID\b/gi, `<@${userId}>`)
-                .replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`);
-              if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
-              if (!answer.trim()) answer = 'yo, say that again?';
-
-              await saveUserAiHistory(client, guildId, userId, [
-                ...history,
-                { role: 'user', parts: [{ text: userMessage }] },
-                { role: 'model', parts: [{ text: answer }] },
-              ]);
-
-              const mentionIds = [
-                ...answer.matchAll(/<@!?(\d{17,20})>/g),
-              ].map((m) => m[1]);
-
-              const payload = {
-                content: answer,
-                allowedMentions: {
-                  users: mentionIds.length ? mentionIds : [],
-                },
-              };
-
-              if (targetChannel.id === message.channel.id) {
-                await message.reply(payload).catch(() =>
-                  targetChannel.send(payload).catch(() => {}),
-                );
-              } else {
-                await targetChannel
-                  .send({
-                    content: `${answer}`,
-                    allowedMentions: payload.allowedMentions,
-                  })
-                  .catch(() => {});
-                await message
-                  .reply({
-                    content: `sent in ${targetChannel}`,
-                    allowedMentions: { parse: [] },
-                  })
-                  .catch(() => {});
-              }
-              return;
+            const imageUrls = [...new Set(media.map((m) => m.url).filter(Boolean))].slice(0, 4);
+            let mediaNote = '';
+            try {
+              mediaNote = formatMediaContext ? formatMediaContext(media.slice(0, 4)) : '';
+            } catch (_) {
+              mediaNote = imageUrls.map((u) => `[Media: ${u}]`).join('\n');
             }
+
+            // Context from the message being replied to (text)
+            let replyCtx = '';
+            if (refMessage) {
+              const who = refMessage.author?.username || 'someone';
+              const refText = (refMessage.content || '').trim().slice(0, 500);
+              replyCtx =
+                `\n[Replying to @${who}` +
+                (refText ? `: "${refText}"` : ' (media/attachment message)') +
+                ']';
+            }
+
+            if (mediaNote) {
+              userMessage = (userMessage ? userMessage + '\n\n' : '') + mediaNote +
+                '\n(Look at the photo/GIF above and answer the user request about it.)';
+            }
+            if (replyCtx) {
+              userMessage = (userMessage || '') + replyCtx;
+            }
+            if (!userMessage.trim()) {
+              userMessage = mediaNote || 'hey — what do you see?';
+            }
+
+            const lower = userMessage.toLowerCase();
+            if (/\b(bisaya|cebuano)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
+              await saveUserAiPrefs(client, guildId, userId, { language: 'ceb' });
+            }
+            if (/\b(tagalog|filipino)\b/i.test(userMessage) && /\b(yes|oo|sige|please|from now|bet|go)\b/i.test(lower)) {
+              await saveUserAiPrefs(client, guildId, userId, { language: 'tl' });
+            }
+            if (/\b(english)\b/i.test(userMessage) && /\b(yes|please|from now|bet|go)\b/i.test(lower)) {
+              await saveUserAiPrefs(client, guildId, userId, { language: 'en' });
+            }
+            if (/\b(personal(ize)?|custom(ize)?|be my ai)\b/i.test(lower)) {
+              await saveUserAiPrefs(client, guildId, userId, {
+                customStyle: userMessage.slice(0, 800),
+              });
+            }
+
+            // Optional: "reply in #channel"
+            let targetChannel = message.channel;
+            const channelMention = message.mentions?.channels?.first?.();
+            if (
+              channelMention &&
+              /\b(reply (me )?(in|at|on)|answer (me )?(in|at|on)|talk (to me )?(in|at|on)|message me (in|at|on)|go to)\b/i.test(
+                userMessage,
+              )
+            ) {
+              targetChannel = channelMention;
+            }
+
+            const history = await getUserAiHistory(client, guildId, userId);
+            let systemInstructions = await buildSystemInstructions(
+              client,
+              guildId,
+              userId,
+              config.systemInstructions,
+            );
+            systemInstructions +=
+              `\n\nCurrent speaker: ${message.author.username} (ID ${userId}). ` +
+              `They are chatting in #${message.channel.name}. ` +
+              `To mention them write <@${userId}>. Never write USER_ID as a placeholder. ` +
+              `You may be given a photo/GIF from a message they replied to plus their text — handle BOTH: describe/react to the media AND answer their request. Multi-task.`;
+
+            if (targetChannel.id !== message.channel.id) {
+              systemInstructions +=
+                `\nThey asked you to continue in #${targetChannel.name}. Answer fully; the bot will post there.`;
+            }
+
+            let answer = await generateReply({
+              systemInstructions,
+              userMessage,
+              model: config.model,
+              history,
+              imageUrls,
+            });
+
+            answer = String(answer || '')
+              .replace(/<@USER_ID>/gi, `<@${userId}>`)
+              .replace(/@USER_ID\b/gi, `<@${userId}>`)
+              .replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`);
+            if (answer.length > 1800) answer = answer.slice(0, 1800) + '...';
+            if (!answer.trim()) answer = 'yo, say that again?';
+
+            await saveUserAiHistory(client, guildId, userId, [
+              ...history,
+              { role: 'user', parts: [{ text: userMessage.slice(0, 1500) }] },
+              { role: 'model', parts: [{ text: answer }] },
+            ]);
+
+            const mentionIds = [...answer.matchAll(/<@!?(\d{17,20})>/g)].map((m) => m[1]);
+            const payload = {
+              content: answer,
+              allowedMentions: { users: mentionIds.length ? mentionIds : [] },
+            };
+
+            if (targetChannel.id === message.channel.id) {
+              await message.reply(payload).catch(() =>
+                targetChannel.send(payload).catch(() => {}),
+              );
+            } else {
+              await targetChannel
+                .send({ content: `${answer}`, allowedMentions: payload.allowedMentions })
+                .catch(() => {});
+              await message
+                .reply({ content: `sent in ${targetChannel}`, allowedMentions: { parse: [] } })
+                .catch(() => {});
+            }
+            return;
           }
         }
       } catch (err) {
