@@ -479,6 +479,11 @@ ${
 </html>`;
 }
 
+app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
+  res.send(layout('Stopped', '<div class="card"><p class="err">Bot process stopping. Use your host panel to Start again if it does not auto-restart.</p></div>', 'dashboard'));
+  setTimeout(() => { try { process.exit(1); } catch (_) {} }, 500);
+});
+
 app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
   res.send(layout('Restart', '<div class="card"><p class="ok">Restarting… The host should bring the panel back automatically.</p></div>', 'dashboard'));
   setTimeout(() => { try { process.exit(0); } catch (_) {} }, 600);
@@ -567,11 +572,13 @@ app.get(path('/login'), (req, res) => {
     layout(
       'Login',
       `${err}
-      <form method="POST" action="${path('/login')}">
+      <form method="POST" action="${path('/login')}" autocomplete="off">
+        <input type="text" name="fakeuser" value="" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off"/>
+        <input type="password" name="fakepass" value="" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off"/>
         <label>Username</label>
-        <input type="text" name="username" required autocomplete="username"/>
+        <input type="text" name="username" required autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" autocapitalize="off" spellcheck="false"/>
         <label>Password</label>
-        <input type="password" name="password" required autocomplete="current-password"/>
+        <input type="password" name="password" required autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')"/>
         <div class="row"><button class="btn" type="submit">Log in</button></div>
       </form>`,
       'login',
@@ -723,6 +730,20 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
           <button class="btn" type="submit">Save presence</button>
         </form>
       </div>
+        <div class="card" id="process-controls" style="margin-top:16px;border-color:rgba(255,70,85,.3)">
+          <h2>Process controls</h2>
+          <p class="muted">Host must auto-restart after stop/restart. Start = wake process if host supports it.</p>
+          <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
+            <form method="POST" action="${path('/dashboard/restart')}" onsubmit="return confirm('Restart bot now?')">
+              <button class="btn" type="submit">Restart</button>
+            </form>
+            <form method="POST" action="${path('/dashboard/stop')}" onsubmit="return confirm('Stop bot process? Panel will go offline until host restarts it.')">
+              <button class="btn danger" type="submit">Stop</button>
+            </form>
+            <a class="btn secondary" href="${path('/dashboard')}">Refresh / Start check</a>
+          </div>
+        </div>
+
       <div class="card" style="margin-top:14px">
         <h2>Recent logs</h2>
         <pre id="live-logs" class="muted" style="white-space:pre-wrap;max-height:180px;overflow:auto;font-size:12px">…</pre>
@@ -852,14 +873,21 @@ app.get(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
   res.send(
     layout(
       'Maintenance',
-      `<h1>Maintenance</h1>${saved}
-      <div class="banner"><div class="cap">Sealed doors<small>Offline / maintenance mode</small></div></div>
-      <div class="card">
+      `<h1>MAINTENANCE</h1>
+      <div class="banner" style="background:linear-gradient(135deg,rgba(255,70,85,.25),rgba(15,20,28,.9));border-color:rgba(255,70,85,.45)">
+        <div class="cap">SEALED DOORS<small>VALORANT PROTOCOL · OFFLINE / MAINTENANCE</small></div>
+      </div>
+      ${saved}
+      <div class="card" style="border-color:rgba(255,70,85,.35);box-shadow:0 0 30px rgba(255,70,85,.12)">
         <form method="POST" action="${path('/dashboard/maintenance')}">
-          <label class="row"><input type="checkbox" name="maintenanceMode" value="1" ${on ? 'checked' : ''}/> Maintenance mode</label>
-          <label>Message</label>
-          <textarea name="maintenanceMessage" maxlength="500">${escapeHtml(msg)}</textarea>
-          <div class="row"><button class="btn ${on ? 'danger' : 'good'}" type="submit">Save</button></div>
+          <label class="row" style="gap:12px;align-items:center;margin-bottom:14px">
+            <input type="checkbox" name="maintenanceMode" value="1" ${on ? 'checked' : ''} style="width:18px;height:18px;accent-color:#ff4655"/>
+            <span style="font-family:var(--display);letter-spacing:.1em;color:#ff4655">MAINTENANCE MODE</span>
+          </label>
+          <label style="color:var(--muted);font-size:11px;letter-spacing:.12em">MESSAGE TO USERS</label>
+          <textarea name="maintenanceMessage" rows="5" style="border-color:rgba(255,70,85,.3)">${escapeHtml(msg || '')}</textarea>
+          <p class="muted" style="margin-top:8px">When ON, commands reply with this message. Active polls/giveaways pause entry.</p>
+          <button class="btn" type="submit" style="margin-top:12px">SAVE PROTOCOL</button>
         </form>
       </div>`,
       'maintenance',
@@ -1100,12 +1128,18 @@ app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
       const delUrl = ${JSON.stringify(path('/dashboard/giveaways/delete'))};
       function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
       async function load() {
+        const root = document.getElementById('gw-root');
         try {
-          const r = await fetch(api, { credentials: 'same-origin' });
-          if (!r.ok) return;
+          const ctrl = new AbortController();
+          const to = setTimeout(() => ctrl.abort(), 8000);
+          const r = await fetch(api, { credentials: 'same-origin', signal: ctrl.signal });
+          clearTimeout(to);
+          if (!r.ok) {
+            root.innerHTML = '<div class="card"><p class="err">Failed to load giveaways (HTTP '+r.status+').</p></div>';
+            return;
+          }
           const d = await r.json();
           const items = d.items || [];
-          const root = document.getElementById('gw-root');
           if (!items.length) {
             root.innerHTML = '<div class="card"><p class="muted">No giveaways in database.</p></div>';
             return;
@@ -1129,10 +1163,12 @@ app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
               '<form method="POST" action="'+delUrl+'" style="display:inline" onsubmit="return confirm(\'Delete giveaway + winner message from Discord & Mongo?\')"><input type="hidden" name="key" value="'+esc(g.key)+'"/><button class="btn danger" type="submit">Delete</button></form>' +
               '</div></div>';
           }).join('');
-        } catch (e) {}
+        } catch (e) {
+          root.innerHTML = '<div class="card"><p class="err">Giveaways error: '+(e.message||e)+'</p><p class="muted">Retrying…</p></div>';
+        }
       }
       load();
-      setInterval(load, 3000);
+      setInterval(load, 5000);
       </script>`,
       'giveaways',
     ),
@@ -1142,28 +1178,35 @@ app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
 app.get(path('/api/giveaways'), requireAuth, async (req, res) => {
   const items = [];
   try {
-    if (discordClient?.db?.list) {
-      const keys = await discordClient.db.list('giveaway:');
-      for (const k of keys.slice(0, 80)) {
-        if ((k.match(/:/g) || []).length !== 1) continue;
-        const g = await discordClient.db.get(k, null);
-        if (!g || typeof g !== 'object' || !(g.prize || g.messageId)) continue;
-        // auto-purge if Discord message gone
-        if (g.channelId && g.messageId) {
-          try {
-            const ch = await discordClient.channels.fetch(g.channelId).catch(() => null);
-            const msg = ch ? await ch.messages.fetch(g.messageId).catch(() => null) : null;
-            if (!msg) {
-              await discordClient.db.delete(k);
-              continue;
-            }
-          } catch (_) {}
-        }
-        items.push({ key: k, ...g });
-      }
+    if (!discordClient?.db) {
+      return res.json({ items: [], at: Date.now(), error: 'db offline' });
+    }
+    const keys = (await discordClient.db.list('giveaway:').catch(() => [])) || [];
+    for (const k of keys.slice(0, 80)) {
+      if (typeof k !== 'string') continue;
+      // real giveaways: giveaway:ID (exactly one colon)
+      if ((k.match(/:/g) || []).length !== 1) continue;
+      const g = await discordClient.db.get(k, null);
+      if (!g || typeof g !== 'object') continue;
+      if (!(g.prize || g.messageId || g.endsAt)) continue;
+      items.push({
+        key: k,
+        prize: g.prize,
+        ended: !!(g.ended || g.isEnded),
+        isEnded: !!(g.ended || g.isEnded),
+        endsAt: g.endsAt || g.endTime || null,
+        entrants: g.entrants || g.participants || [],
+        participants: g.participants || g.entrants || [],
+        winners: g.winners || g.winnerCount || 1,
+        winnerCount: g.winnerCount || g.winners || 1,
+        winnerIds: g.winnerIds || [],
+        messageId: g.messageId,
+        channelId: g.channelId,
+      });
     }
   } catch (e) {
     console.error('api giveaways', e);
+    return res.status(500).json({ items: [], error: e.message, at: Date.now() });
   }
   items.sort((a, b) => (b.endsAt || 0) - (a.endsAt || 0));
   res.json({ items, at: Date.now() });
