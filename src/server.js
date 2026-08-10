@@ -1499,211 +1499,124 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
 
 app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
   let threads = [];
+  let listErr = '';
   try {
     const { listInbox } = await import('./services/dmInboxService.js');
     threads = (await listInbox(discordClient)) || [];
   } catch (e) {
     console.error('dms page list', e);
+    listErr = e.message || String(e);
   }
 
-  const initial = threads.map((t) => ({
-    userId: t.userId,
-    userTag: t.userTag || t.userId,
-    userName: t.userName || (t.userTag ? String(t.userTag).split('#')[0] : null),
-    status: t.status || 'open',
-    messages: t.messages || [],
-    autoAiAt: t.autoAiAt || null,
-  }));
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function mediaHtml(m) {
+    let html = '';
+    for (const med of m.media || []) {
+      const u = med.url || '';
+      const ct = (med.contentType || '').toLowerCase();
+      const low = u.toLowerCase();
+      const isGif =
+        ct.includes('gif') ||
+        /\.gif(\?|$)/i.test(low) ||
+        /tenor\.|giphy\.|klipy\./i.test(low);
+      const isImg =
+        ct.startsWith('image') ||
+        isGif ||
+        /\.(png|jpe?g|webp|gif)(\?|$)/i.test(low);
+      if (isImg && u) {
+        html += `<div style="margin-top:6px"><a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>`;
+      } else if ((ct.startsWith('video') || /\.(mp4|webm|mov)(\?|$)/i.test(low)) && u) {
+        html += `<div style="margin-top:6px"><video src="${esc(u)}" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>`;
+      } else if (u) {
+        html += `<div style="margin-top:6px"><a href="${esc(u)}" target="_blank">${esc(med.name || 'file')}</a></div>`;
+      }
+    }
+    return html;
+  }
+
+  let cards = '';
+  if (listErr) {
+    cards = `<div class="card"><p class="err">Failed to load DMs: ${esc(listErr)}</p></div>`;
+  } else if (!threads.length) {
+    cards = `<div class="card"><p class="muted">No DMs yet. When someone messages the bot, threads appear here.</p></div>`;
+  } else {
+    for (const t of threads) {
+      const displayName = t.userName
+        ? `@${t.userName}`
+        : t.userTag
+          ? `@${String(t.userTag).split('#')[0]}`
+          : 'user';
+      const bubbles = (t.messages || [])
+        .map((m) => {
+          const who =
+            m.from === 'user' ? displayName : m.from === 'ai' ? 'AI' : 'You';
+          const cls =
+            m.from === 'user' ? 'user' : m.from === 'ai' ? 'ai' : 'owner';
+          return `<div class="bubble ${cls}"><div class="who">${esc(who)}</div>${m.content ? esc(m.content) : ''}${mediaHtml(m)}</div>`;
+        })
+        .join('');
+      let badge = `<span class="badge on">${esc(t.status || 'open')}</span>`;
+      if (t.autoAiAt && t.status === 'waiting_owner') {
+        const left = Math.max(0, Math.floor((t.autoAiAt - Date.now()) / 1000));
+        badge = `<span class="badge off">Auto-AI ${Math.floor(left / 60)}m ${left % 60}s</span>`;
+      }
+      cards += `<div class="card dm-card">
+        <div class="dm-head"><h2>${esc(displayName)}</h2><div class="row">${badge}
+          <form method="POST" action="${path('/dashboard/dms/delete')}" style="display:inline" onsubmit="return confirm('Remove from dashboard only?')">
+            <input type="hidden" name="userId" value="${esc(t.userId)}"/>
+            <button class="btn danger" type="submit" style="padding:6px 10px;font-size:11px">Delete</button>
+          </form>
+        </div></div>
+        <div class="dm-thread" data-uid="${esc(t.userId)}">${bubbles}</div>
+        <div class="dm-actions">
+          <form method="POST" action="${path('/dashboard/dms/reply')}">
+            <input type="hidden" name="userId" value="${esc(t.userId)}"/>
+            <input type="hidden" name="mode" value="human"/>
+            <textarea name="content" placeholder="Type your reply…" required></textarea>
+            <div class="row" style="margin-top:10px;gap:8px">
+              <button class="btn" type="submit">Send my words</button>
+            </div>
+          </form>
+          <form method="POST" action="${path('/dashboard/dms/reply')}" style="margin-top:8px">
+            <input type="hidden" name="userId" value="${esc(t.userId)}"/>
+            <input type="hidden" name="mode" value="ai"/>
+            <input type="hidden" name="content" value=""/>
+            <button class="btn secondary" type="submit">AI reply</button>
+          </form>
+        </div>
+      </div>`;
+    }
+  }
 
   res.send(
     layout(
       'DMs',
       `<h1>Bot DMs</h1>
-      <p class="muted" id="dm-flash"></p>
-      <p class="muted">Live updates · opens on latest messages · @names on dashboard</p>
-      <div id="dm-list"><p class="muted">Loading…</p></div>
+      <p class="muted">Server-rendered · auto-refresh every 10s</p>
+      <div id="dm-list">${cards}</div>
       <style>
-        #dm-list{width:100%;max-width:100%;overflow:hidden;display:flex;flex-direction:column;gap:14px}
-        .dm-card{width:100%;box-sizing:border-box;border-radius:10px;padding:16px}
+        #dm-list{display:flex;flex-direction:column;gap:14px}
+        .dm-card{border-radius:10px;padding:16px}
         .dm-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-        .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;word-break:break-all}
+        .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0}
         .dm-thread{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow-y:auto;padding:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px}
         .bubble{max-width:min(78%,460px);padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.45;word-break:break-word}
         .bubble.user{align-self:flex-start;background:rgba(255,255,255,.07);border:1px solid var(--line)}
         .bubble.owner{align-self:flex-end;background:rgba(255,70,85,.28);border:1px solid rgba(255,70,85,.45)}
         .bubble.ai{align-self:flex-end;background:rgba(15,221,163,.14);border:1px solid rgba(15,221,163,.4)}
         .bubble .who{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-        .dm-actions{margin-top:12px}
         .dm-actions textarea{min-height:80px;width:100%;box-sizing:border-box;border-radius:8px}
       </style>
       <script>
-      const api = ${JSON.stringify(path('/api/dms'))};
-      const replyUrl = ${JSON.stringify(path('/dashboard/dms/reply'))};
-      const dmDelUrl = ${JSON.stringify(path('/dashboard/dms/delete'))};
-      let threads = ${JSON.stringify(initial).replace(/</g, '\\u003c')};
-      const scrollMap = {};
-      const draftMap = {};
-      let activeUserId = null;
-      let lastFingerprint = '';
-      let typingPauseUntil = 0;
-      let sending = false;
-
-      function esc(s){
-        return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-      }
-      function roleClass(from){
-        if(from==='user') return 'user';
-        if(from==='ai') return 'ai';
-        return 'owner';
-      }
-      function roleLabel(from){
-        if(from==='user') return 'User';
-        if(from==='ai') return 'AI';
-        return 'You';
-      }
-      function flash(msg, isErr){
-        const el = document.getElementById('dm-flash');
-        if(!el) return;
-        el.textContent = msg || '';
-        el.className = isErr ? 'err' : 'ok';
-      }
-      function isTyping(){
-        const a = document.activeElement;
-        return a && a.tagName === 'TEXTAREA' && a.hasAttribute('data-uid');
-      }
-      function saveScrollState(){
-        document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
-          scrollMap[el.getAttribute('data-uid')] = el.scrollTop;
-        });
-        document.querySelectorAll('textarea[data-uid]').forEach(function(el){
-          draftMap[el.getAttribute('data-uid')] = el.value;
-          if(document.activeElement === el) activeUserId = el.getAttribute('data-uid');
-        });
-      }
-            function mediaHtml(m){
-        let html = '';
-        (m.media||[]).forEach(function(med){
-          const u = med.url || '';
-          const ct = (med.contentType||'').toLowerCase();
-          const low = u.toLowerCase();
-          const isGif = ct.indexOf('gif')>=0 || /\.gif(\?|$)/i.test(low) || /tenor\.|giphy\.|klipy\./i.test(low);
-          const isImg = ct.indexOf('image')===0 || isGif || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(low) || /media\.discordapp|cdn\.discordapp/i.test(low);
-          if(isImg){
-            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="gif" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
-          } else if(ct.indexOf('video')===0 || /\.(mp4|webm|mov)(\?|$)/i.test(low)){
-            html += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>';
-          } else if(u){
-            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank">'+esc(med.name||'file')+'</a></div>';
-          }
-        });
-        // Also detect bare gif URLs left in text content
-        const text = m.content || '';
-        const urls = text.match(/https?:\/\/[^\s]+/gi) || [];
-        urls.forEach(function(u){
-          const low = u.toLowerCase();
-          if(/\.gif(\?|$)/i.test(low) || /tenor\.|giphy\.|klipy\./i.test(low)){
-            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="gif" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
-          }
-        });
-        return html;
-      }
-      function render(){
-        const box = document.getElementById('dm-list');
-        if(!threads.length){
-          box.innerHTML = '<div class="card"><p class="muted">No DMs yet. When someone messages the bot, threads appear here.</p></div>';
-          return;
-        }
-        box.innerHTML = threads.map(function(t){
-          const displayName = t.userName ? ('@'+t.userName) : (t.userTag ? ('@'+String(t.userTag).split('#')[0]) : ('user'));
-          const hist = (t.messages||[]).map(function(m){
-            const who = m.from==='user' ? displayName : roleLabel(m.from);
-            return '<div class="bubble '+roleClass(m.from)+'"><div class="who">'+esc(who)+'</div>'+(m.content?esc(m.content):'')+mediaHtml(m)+'</div>';
-          }).join('');
-          let timer = '';
-          if(t.autoAiAt && t.status==='waiting_owner'){
-            const left = Math.max(0, Math.floor((t.autoAiAt - Date.now())/1000));
-            timer = '<span class="badge off">Auto-AI '+Math.floor(left/60)+'m '+(left%60)+'s</span>';
-          } else {
-            timer = '<span class="badge on">'+esc(t.status||'open')+'</span>';
-          }
-          return '<div class="card dm-card" data-card="'+esc(t.userId)+'">'+
-            '<div class="dm-head"><h2>'+esc(displayName)+'</h2><div class="row">'+timer+
-            '<button type="button" class="btn danger" data-dm-del="'+esc(t.userId)+'" style="padding:6px 10px;font-size:11px">Delete</button></div></div>'+
-            '<div class="dm-thread" data-uid="'+esc(t.userId)+'">'+hist+'</div>'+
-            '<div class="dm-actions"><textarea data-uid="'+esc(t.userId)+'" placeholder="Type your reply…"></textarea>'+
-            '<div class="row" style="margin-top:10px;gap:8px">'+
-            '<button type="button" class="btn" data-send="human" data-uid="'+esc(t.userId)+'">Send my words</button>'+
-            '<button type="button" class="btn secondary" data-send="ai" data-uid="'+esc(t.userId)+'">AI reply</button>'+
-            '</div></div></div>';
-        }).join('');
-        document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
-          const uid = el.getAttribute('data-uid');
-          if(scrollMap[uid] != null) el.scrollTop = scrollMap[uid];
-          else el.scrollTop = el.scrollHeight;
-        });
-        document.querySelectorAll('textarea[data-uid]').forEach(function(el){
-          const uid = el.getAttribute('data-uid');
-          if(draftMap[uid] != null) el.value = draftMap[uid];
-          el.addEventListener('focus', function(){ activeUserId = uid; typingPauseUntil = Date.now()+15000; });
-          el.addEventListener('input', function(){ draftMap[uid]=el.value; typingPauseUntil = Date.now()+15000; });
-        });
-        bindButtons();
-      }
-      function bindButtons(){
-        document.querySelectorAll('[data-send]').forEach(function(btn){
-          btn.onclick = async function(){
-            const uid = btn.getAttribute('data-uid');
-            const mode = btn.getAttribute('data-send');
-            const ta = document.querySelector('textarea[data-uid="'+uid+'"]');
-            const content = ta ? ta.value.trim() : '';
-            if(mode==='human' && !content){ flash('Type a message first', true); return; }
-            sending = true;
-            try{
-              const body = new URLSearchParams();
-              body.set('userId', uid);
-              body.set('mode', mode);
-              body.set('content', content);
-              const r = await fetch(replyUrl, { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, body });
-              const d = await r.json().catch(()=>({}));
-              if(!r.ok || d.ok===false){ flash(d.error||'Send failed', true); }
-              else {
-                if(ta) ta.value='';
-                draftMap[uid]='';
-                flash('Sent');
-                await refresh(true);
-              }
-            }catch(e){ flash(e.message||'error', true); }
-            sending = false;
-          };
-        });
-        document.querySelectorAll('[data-dm-del]').forEach(function(btn){
-          btn.onclick = async function(){
-            if(!confirm('Remove from dashboard + DB only (not Discord chat history)?')) return;
-            const uid = btn.getAttribute('data-dm-del');
-            const body = new URLSearchParams();
-            body.set('userId', uid);
-            await fetch(dmDelUrl, { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, body });
-            await refresh(true);
-          };
-        });
-      }
-      async function refresh(force){
-        if(sending || (isTyping() && Date.now() < typingPauseUntil)) return;
-        if(!force) saveScrollState();
-        try{
-          const r = await fetch(api, { credentials:'same-origin', cache:'no-store' });
-          if(!r.ok) return;
-          const d = await r.json();
-          const next = d.threads || [];
-          const fp = JSON.stringify(next.map(t => [t.userId, (t.messages||[]).length, t.status, t.autoAiAt]));
-          if(!force && fp === lastFingerprint) return;
-          lastFingerprint = fp;
-          threads = next;
-          render();
-        }catch(e){}
-      }
-      render();
-      setInterval(function(){ refresh(false); }, 4000);
+        document.querySelectorAll('.dm-thread').forEach(function(el){ el.scrollTop = el.scrollHeight; });
+        setTimeout(function(){ location.reload(); }, 10000);
       </script>`,
       'dms',
     ),
