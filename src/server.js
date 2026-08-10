@@ -29,6 +29,7 @@ import { getLogs, pushLog } from './utils/logBuffer.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const port = process.env.PORT || process.env.SERVER_PORT || 3000;
 const host = '0.0.0.0';
 
@@ -88,15 +89,15 @@ function getCookie(req, name) {
 function setSessionCookie(res, token) {
   res.setHeader(
     'Set-Cookie',
-    `yuri_dash=${encodeURIComponent(token)}; Path=${BASE || '/'}; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+    `yuri_dash=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
   );
 }
 function clearSessionCookie(res) {
-  res.setHeader('Set-Cookie', `yuri_dash=; Path=${BASE || '/'}; HttpOnly; Max-Age=0`);
+  res.setHeader('Set-Cookie', `yuri_dash=; Path=/; HttpOnly; Max-Age=0`);
 }
 function requireAuth(req, res, next) {
   if (!isValidSession(getCookie(req, 'yuri_dash'))) {
-    return res.redirect(path('/login'));
+    return res.redirect(303, path('/login'));
   }
   next();
 }
@@ -191,7 +192,7 @@ body::after{
   mask-image:radial-gradient(ellipse at center,black 20%,transparent 75%);
 }
 a{color:inherit;text-decoration:none}
-.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px;overflow-x:hidden;width:100%;box-sizing:border-box}
+.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px;overflow-x:hidden;width:100%;box-sizing:border-boxpadding-top:72px;}
 ${isLogin ? '.shell{max-width:100%;height:100vh;padding:0;display:flex;flex-direction:column}' : ''}
 
 .hero{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -206,7 +207,15 @@ ${isLogin ? '.shell{max-width:100%;height:100vh;padding:0;display:flex;flex-dire
 .brand{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;line-height:1}
 .brand span{display:block;font-family:var(--font);font-size:11px;font-weight:500;color:var(--muted);margin-top:4px;letter-spacing:.14em}
 
-.top{position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);background:rgba(10,12,16,.92);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 4px;margin-bottom:12px}
+.top{
+  position:fixed;top:0;left:0;right:0;z-index:1000;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:10px 16px;
+  background:rgba(8,10,14,.94);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,70,85,.22);
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
 .nav{
   display:flex;gap:4px;flex-wrap:wrap;padding:4px;
   background:rgba(0,0,0,.35);border:1px solid var(--line);
@@ -320,9 +329,13 @@ textarea{min-height:200px;resize:vertical;line-height:1.5}
 
 /* login — no page scroll */
 .login-screen{
-  flex:1;display:flex;align-items:center;justify-content:center;
-  padding:16px;min-height:0;overflow:hidden;
+  min-height:100dvh;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  padding:24px 16px;box-sizing:border-box;
+  overflow:auto;
 }
+body.is-login .shell{padding-top:0 !important;min-height:100dvh}
+body.is-login .top,body.is-login .hero{display:none !important}
 .login-card{
   width:min(380px,100%);padding:28px 24px;
   background:var(--panel);border:1px solid rgba(255,70,85,.25);
@@ -349,14 +362,7 @@ textarea{min-height:200px;resize:vertical;line-height:1.5}
 .flash.ok{border-color:rgba(15,221,163,.4);color:var(--val2)}
 .flash.err{border-color:rgba(255,70,85,.4);color:var(--val)}
 
-@media (max-width:720px){
-  .shell{padding:10px 12px}
-  .nav{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
-  .nav-link{flex:0 0 auto;white-space:nowrap}
-  .login-screen{overflow:auto;align-items:flex-start;padding-top:6vh}
-  .grid-2{grid-template-columns:1fr !important}
-  .stat-grid{grid-template-columns:1fr 1fr}
-
+@media (max-width:640px){
   .brand{font-size:20px}
   h1{font-size:22px}
   .nav-link{padding:8px 10px;font-size:12px}
@@ -384,6 +390,37 @@ textarea{min-height:200px;resize:vertical;line-height:1.5}
 .logs::-webkit-scrollbar-track,#live-logs::-webkit-scrollbar-track,.dm-thread::-webkit-scrollbar-track,textarea::-webkit-scrollbar-track{
   background:rgba(0,0,0,.3)!important;
 }
+
+@media (max-width:720px){
+  .shell{padding:12px 12px;padding-top:118px}
+  .top{
+    flex-direction:column;align-items:stretch;gap:8px;
+    padding:8px 10px;
+  }
+  .nav{
+    display:grid !important;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:6px;
+    overflow:visible !important;
+    flex-wrap:unset !important;
+    width:100%;
+  }
+  .nav-link{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:8px 4px;font-size:10px;letter-spacing:.04em;
+    white-space:normal;line-height:1.2;min-height:44px;
+  }
+  .nav-ico{font-size:14px;margin-bottom:2px}
+  .top form{width:100%}
+  .top .btn{width:100%}
+  .login-screen{min-height:100dvh;align-items:center;justify-content:center;padding:20px}
+  .login-card{width:100%;max-width:380px;margin:auto}
+  .grid-2{grid-template-columns:1fr !important}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .hero{margin-top:0}
+  h1{font-size:22px}
+}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -402,14 +439,9 @@ ${
         ${body}
         <div class="credits">
           <strong>Credits</strong><br/>
-          Bot &amp; dashboard: <a href="${process.env.OFFICIAL_WEBSITE || 'https://github.com/YuriRinkashime'}" target="_blank" rel="noopener"><strong>Yuri Rinkashime (RinkaYuri)</strong></a> · BANORANT CAFE 🎮<br/>
+          Bot &amp; dashboard: <strong>Yuri Rinkashime (RinkaYuri)</strong> · BANORANT CAFE 🎮<br/>
           Runtime: Yuri's Chamber · Built for Filipino Valorant community<br/>
           Design inspired by VALORANT agent Chamber · Not affiliated with Riot Games
-        </div>
-        <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
-          <form method="POST" action="${path('/dashboard/restart')}" onsubmit="return confirm('Restart the bot process? Host must auto-restart.')">
-            <button class="btn secondary" type="submit">Restart bot</button>
-          </form>
         </div>
         <p class="footer-note">Owner access only · sealed chamber</p>
       </div>`
@@ -417,14 +449,6 @@ ${
 </body>
 </html>`;
 }
-
-
-app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
-  res.send(layout('Restart', '<div class="card"><p class="ok">Restarting bot process… If the host auto-restarts, the panel will come back shortly.</p></div>', 'dashboard'));
-  setTimeout(() => {
-    try { process.exit(0); } catch (_) {}
-  }, 800);
-});
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 app.get('/ready', (req, res) => {
@@ -435,8 +459,8 @@ app.get('/ready', (req, res) => {
     maintenance: isMaintenanceModeRuntime(),
   });
 });
-app.get('/', (req, res) => res.redirect(path('/login')));
-if (BASE) app.get(BASE, (req, res) => res.redirect(path('/login')));
+app.get('/', (req, res) => res.redirect(303, path('/login')));
+if (BASE) app.get(BASE, (req, res) => res.redirect(303, path('/login')));
 
 app.get(path('/api/live'), requireAuth, async (req, res) => {
   const user = discordClient?.user;
@@ -489,7 +513,6 @@ app.get(path('/api/dms'), requireAuth, async (req, res) => {
       threads: (threads || []).map((t) => ({
         userId: t.userId,
         userTag: t.userTag || t.userId,
-        userName: t.userName || null,
         status: t.status || 'open',
         messages: (t.messages || []).slice(-10),
         autoAiAt: t.autoAiAt || null,
@@ -501,7 +524,7 @@ app.get(path('/api/dms'), requireAuth, async (req, res) => {
 });
 
 app.get(path('/login'), (req, res) => {
-  if (isValidSession(getCookie(req, 'yuri_dash'))) return res.redirect(path('/dashboard'));
+  if (isValidSession(getCookie(req, 'yuri_dash'))) return res.redirect(303, path('/dashboard'));
   let err = '';
   if (req.query.error === '1') err = '<p class="err">Wrong username or password.</p>';
   if (req.query.error === 'config') err = '<p class="err">Login is not configured.</p>';
@@ -509,11 +532,11 @@ app.get(path('/login'), (req, res) => {
     layout(
       'Login',
       `${err}
-      <form method="POST" action="${path('/login')}" autocomplete="on">
+      <form method="POST" action="${path('/login')}">
         <label>Username</label>
-        <input type="text" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required autocomplete="username"/>
+        <input type="text" name="username" required autocomplete="username"/>
         <label>Password</label>
-        <input type="password" name="password" autocomplete="current-password" required autocomplete="current-password"/>
+        <input type="password" name="password" required autocomplete="current-password"/>
         <div class="row"><button class="btn" type="submit">Log in</button></div>
       </form>`,
       'login',
@@ -523,7 +546,7 @@ app.get(path('/login'), (req, res) => {
 
 app.post(path('/login'), (req, res) => {
   if (!DASHBOARD_USERNAME || !DASHBOARD_PASSWORD) {
-    return res.redirect(path('/login') + '?error=config');
+    return res.redirect(303, path('/login') + '?error=config');
   }
   const username = String(req.body.username || '');
   const password = String(req.body.password || '');
@@ -531,16 +554,16 @@ app.post(path('/login'), (req, res) => {
   const a = Buffer.from(password);
   const b = Buffer.from(DASHBOARD_PASSWORD);
   const passOk = a.length === b.length && crypto.timingSafeEqual(a, b);
-  if (!userOk || !passOk) return res.redirect(path('/login') + '?error=1');
+  if (!userOk || !passOk) return res.redirect(303, path('/login') + '?error=1');
   setSessionCookie(res, createSession());
-  res.redirect(path('/dashboard'));
+  res.redirect(303, path('/dashboard'));
 });
 
 app.post(path('/logout'), requireAuth, (req, res) => {
   const t = getCookie(req, 'yuri_dash');
   if (t) sessions.delete(t);
   clearSessionCookie(res);
-  res.redirect(path('/login'));
+  res.redirect(303, path('/login'));
 });
 
 app.post(path('/dashboard/guild'), requireAuth, (req, res) => {
@@ -1388,7 +1411,13 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         }
         .dm-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
         .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;color:var(--text);word-break:break-all}
-        .dm-thread{max-height:70vh;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px}
+        .dm-thread{
+          display:flex;flex-direction:column;gap:10px;
+          max-height:360px;overflow-x:hidden;overflow-y:auto;
+          padding:12px;width:100%;box-sizing:border-box;
+          background:rgba(0,0,0,.35);border:1px solid var(--line);
+          border-radius:8px;
+        }
         .bubble{
           max-width:min(78%, 460px);padding:10px 14px;border-radius:12px;
           font-size:13px;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;
@@ -1523,25 +1552,10 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           return;
         }
         box.innerHTML = threads.map(function(t){
-          const displayName = t.userName ? ('@'+t.userName) : (t.userTag ? ('@'+String(t.userTag).split('#')[0]) : ('@'+t.userId));
           const hist = (t.messages||[]).map(function(m){
-            let mediaHtml = '';
-            (m.media||[]).forEach(function(med){
-              const u = med.url || '';
-              const ct = (med.contentType||'').toLowerCase();
-              if(ct.indexOf('image')===0 || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)){
-                mediaHtml += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--line)"/></a></div>';
-              } else if(ct.indexOf('video')===0 || /\.(mp4|webm|mov)(\?|$)/i.test(u)){
-                mediaHtml += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:240px;border-radius:8px"></video></div>';
-              } else if(u){
-                mediaHtml += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(med.name||'attachment')+'</a></div>';
-              }
-            });
-            const who = m.from==='user' ? displayName : roleLabel(m.from);
             return '<div class="bubble '+roleClass(m.from)+'">'+
-              '<div class="who">'+esc(who)+'</div>'+
-              (m.content ? esc(m.content) : '')+
-              mediaHtml+
+              '<div class="who">'+esc(roleLabel(m.from))+'</div>'+
+              esc(m.content)+
             '</div>';
           }).join('');
           let timer = '';
@@ -1552,8 +1566,8 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
             timer = '<span class="badge on">'+esc(t.status||'open')+'</span>';
           }
           return '<div class="card dm-card" data-card="'+esc(t.userId)+'">'+
-            '<div class="dm-head"><h2>'+esc(displayName)+'</h2><div class="row">'+timer+
-            '<button type="button" class="btn danger" data-dm-del="'+esc(t.userId)+'" style="padding:6px 10px;font-size:11px" title="Dashboard + DB + owner card only">Delete</button></div></div>'+
+            '<div class="dm-head"><h2>'+esc(t.userTag)+'</h2><div class="row">'+timer+
+            '<button type="button" class="btn danger" data-dm-del="'+esc(t.userId)+'" style="padding:6px 10px;font-size:11px">Delete</button></div></div>'+
             '<div class="dm-thread" data-uid="'+esc(t.userId)+'">'+hist+'</div>'+
             '<div class="dm-actions">'+
               '<textarea data-uid="'+esc(t.userId)+'" placeholder="Type your reply…"></textarea>'+
