@@ -192,13 +192,25 @@ export function scheduleAutoAi(client, userId) {
 }
 
 export function formatThreadPreview(thread, extra = {}) {
-  const lines = (thread.messages || []).slice(-8).map((m) => {
+  const PAGE = 8;
+  const all = thread.messages || [];
+  const totalPages = Math.max(1, Math.ceil(all.length / PAGE));
+  let page = Number(thread.cardPage ?? totalPages - 1);
+  if (!Number.isFinite(page) || page < 0) page = totalPages - 1;
+  if (page > totalPages - 1) page = totalPages - 1;
+  const slice = all.slice(page * PAGE, page * PAGE + PAGE);
+
+  const lines = slice.map((m) => {
     const who =
       m.from === 'user' ? '👤 User' : m.from === 'ai' ? '🤖 AI' : '✍️ You';
-    return `**${who}:** ${String(m.content).slice(0, 220)}`;
+    const text = m.content || (m.media?.length ? '[attachment]' : '');
+    return `**${who}:** ${String(text).slice(0, 220)}`;
   });
 
   let desc = lines.join('\n') || '_No messages_';
+  if (totalPages > 1) {
+    desc = `_Page ${page + 1}/${totalPages}_\n\n` + desc;
+  }
 
   if (extra.lastSent) {
     desc += `\n\n**📤 Last sent:** ${String(extra.lastSent).slice(0, 400)}`;
@@ -248,7 +260,15 @@ export async function upsertOwnerNotify(
       text: footer || (disableButtons ? 'Handled' : 'AI reply or your words') })
     .setTimestamp();
 
+  const PAGE = 8;
+  const totalPages = Math.max(1, Math.ceil((thread.messages || []).length / PAGE));
+  if (thread.cardPage == null) thread.cardPage = totalPages - 1;
   const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`dm_page:${userId}:prev`)
+      .setLabel('◀ Older')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(totalPages <= 1 || (thread.cardPage || 0) <= 0),
     new ButtonBuilder()
       .setCustomId(`dm_ai:${userId}`)
       .setLabel('AI reply')
@@ -261,6 +281,11 @@ export async function upsertOwnerNotify(
       .setEmoji('✍️')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(Boolean(disableButtons)),
+    new ButtonBuilder()
+      .setCustomId(`dm_page:${userId}:next`)
+      .setLabel('Newer ▶')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(totalPages <= 1 || (thread.cardPage || 0) >= totalPages - 1),
   );
 
   for (const oid of ownerIds) {

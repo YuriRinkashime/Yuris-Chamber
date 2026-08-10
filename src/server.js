@@ -87,13 +87,19 @@ function getCookie(req, name) {
   return null;
 }
 function setSessionCookie(res, token) {
-  res.setHeader(
-    'Set-Cookie',
-    `yuri_dash=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
-  );
+  const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+  const val = encodeURIComponent(token);
+  // Two paths so both / and /panel work behind proxies (HTTP + HTTPS)
+  res.setHeader('Set-Cookie', [
+    `yuri_dash=${val}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+    `yuri_dash=${val}; Path=/panel; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+  ]);
 }
 function clearSessionCookie(res) {
-  res.setHeader('Set-Cookie', `yuri_dash=; Path=/; HttpOnly; Max-Age=0`);
+  res.setHeader('Set-Cookie', [
+    'yuri_dash=; Path=/; HttpOnly; Max-Age=0',
+    'yuri_dash=; Path=/panel; HttpOnly; Max-Age=0',
+  ]);
 }
 function requireAuth(req, res, next) {
   if (!isValidSession(getCookie(req, 'yuri_dash'))) {
@@ -421,6 +427,18 @@ body.is-login .top,body.is-login .hero{display:none !important}
   h1{font-size:22px}
 }
 
+
+.top-brand{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.top-brand .brand span{font-size:9px}
+.shell-main{padding-top:8px;max-width:1100px;margin:0 auto}
+.shell{padding-top:78px !important}
+@media (max-width:720px){
+  .shell{padding-top:128px !important}
+  .top-brand .brand{font-size:14px}
+  .top{flex-direction:column;align-items:stretch}
+  .top-brand{justify-content:center}
+}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -432,25 +450,41 @@ ${
         ${body}
        </div></div></div>`
     : `<div class="shell">
-        <div class="hero"><div class="avatar">◆</div><div class="brand">Yuri's Chamber<span>BANORANT CAFE · control panel</span></div></div>
-        <div class="top"><nav class="nav">${nav}</nav>
+        <div class="top">
+          <div class="top-brand">
+            <div class="avatar" style="width:36px;height:36px;font-size:14px">◆</div>
+            <div class="brand" style="font-size:16px">Yuri's Chamber<span>BANORANT CAFE</span></div>
+          </div>
+          <nav class="nav">${nav}</nav>
           <form method="POST" action="${path('/logout')}" style="margin:0"><button class="btn secondary" type="submit">Log out</button></form>
         </div>
+        <div class="shell-main">
         ${body}
         <div class="credits">
           <strong>Credits</strong><br/>
-          Bot &amp; dashboard: <strong>Yuri Rinkashime (RinkaYuri)</strong> · BANORANT CAFE 🎮<br/>
+          Bot &amp; dashboard: <a href="${process.env.OFFICIAL_WEBSITE || 'https://github.com/YuriRinkashime'}" target="_blank" rel="noopener"><strong>Yuri Rinkashime (RinkaYuri)</strong></a> · BANORANT CAFE 🎮<br/>
           Runtime: Yuri's Chamber · Built for Filipino Valorant community<br/>
           Design inspired by VALORANT agent Chamber · Not affiliated with Riot Games
         </div>
+        <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+          <form method="POST" action="${path('/dashboard/restart')}" onsubmit="return confirm('Restart the bot process now?')">
+            <button class="btn secondary" type="submit">Restart bot</button>
+          </form>
+        </div>
         <p class="footer-note">Owner access only · sealed chamber</p>
+        </div>
       </div>`
 }
 </body>
 </html>`;
 }
 
-app.get('/health', (req, res) => res.json({ status: 'healthy' }));
+app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
+  res.send(layout('Restart', '<div class="card"><p class="ok">Restarting… The host should bring the panel back automatically.</p></div>', 'dashboard'));
+  setTimeout(() => { try { process.exit(0); } catch (_) {} }, 600);
+});
+
+app.get('/health, (req, res) => res.json({ status: 'healthy' }));
 app.get('/ready', (req, res) => {
   res.json({
     ready: true,
@@ -513,8 +547,9 @@ app.get(path('/api/dms'), requireAuth, async (req, res) => {
       threads: (threads || []).map((t) => ({
         userId: t.userId,
         userTag: t.userTag || t.userId,
+        userName: t.userName || (t.userTag ? String(t.userTag).split('#')[0] : null),
         status: t.status || 'open',
-        messages: (t.messages || []).slice(-10),
+        messages: t.messages || [],
         autoAiAt: t.autoAiAt || null,
       })),
     });
@@ -548,7 +583,7 @@ app.post(path('/login'), (req, res) => {
   if (!DASHBOARD_USERNAME || !DASHBOARD_PASSWORD) {
     return res.redirect(303, path('/login') + '?error=config');
   }
-  const username = String(req.body.username || '');
+  const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
   const userOk = username === DASHBOARD_USERNAME;
   const a = Buffer.from(password);
