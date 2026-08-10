@@ -196,11 +196,19 @@ export async function clearDmAiHistory(client, userId) {
  */
 function fixAiMentions(text, userId) {
   if (!text) return text;
+  const id = String(userId);
   let out = String(text);
-  out = out.replace(/<@USER_ID>/gi, `<@${userId}>`);
-  out = out.replace(/@USER_ID\b/gi, `<@${userId}>`);
-  out = out.replace(/\{USER_ID\}/gi, String(userId));
-  out = out.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, id) => `${a}<@${id}>`);
+  // common model failures
+  out = out.replace(/<@!?USER_ID>/gi, `<@${id}>`);
+  out = out.replace(/@USER_ID\b/gi, `<@${id}>`);
+  out = out.replace(/\{USER_ID\}/gi, id);
+  out = out.replace(/\bUSER_ID\b/g, id);
+  // bare snowflake → mention (not already in <@...>)
+  out = out.replace(/(^|[^<@\w])(\d{17,20})\b/g, (full, pre, snow) => {
+    if (snow === id) return `${pre}<@${id}>`;
+    return full;
+  });
+  out = out.replace(/(^|[^<])@(\d{17,20})\b/g, (_, a, sid) => `${a}<@${sid}>`);
   return out;
 }
 
@@ -255,7 +263,7 @@ export async function generateDmReply(client, userId, userMessage) {
       `\n${serverCtx}` +
       `\nUse the conversation history. Do not re-ask language preference if already set.` +
       `\nBe natural, chill, slightly nonchalant Gen Z. Remember EVERYTHING THIS user already told you in history. Never mix other users. Prefer concrete answers over filler. If unsure, ask one short question.` +
-      `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output the text USER_ID or <@USER_ID>.`,
+      `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output the text USER_ID or <@USER_ID>. Always use real Discord mention syntax <@${userId}> when addressing them.`,
   );
 
   let answer = await generateReply({

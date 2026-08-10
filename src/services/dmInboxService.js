@@ -205,7 +205,26 @@ export function formatThreadPreview(thread, extra = {}) {
   const lines = slice.map((m) => {
     const who =
       m.from === 'user' ? '👤 User' : m.from === 'ai' ? '🤖 AI' : '✍️ You';
-    const text = m.content || (m.media?.length ? '[attachment]' : '');
+    const media = m.media || [];
+    const hasImg = media.some((x) => {
+      const ct = (x.contentType || '').toLowerCase();
+      const n = (x.name || x.url || '').toLowerCase();
+      return ct.startsWith('image') || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(n);
+    });
+    const hasVid = media.some((x) => {
+      const ct = (x.contentType || '').toLowerCase();
+      const n = (x.name || x.url || '').toLowerCase();
+      return ct.startsWith('video') || /\.(mp4|webm|mov)(\?|$)/i.test(n);
+    });
+    let text = (m.content || '').trim();
+    if (!text || text === '[attachment]' || text === '[video]') {
+      if (hasVid) text = 'User has sent a video.';
+      else if (hasImg) text = 'User has sent a photo/gif.';
+      else if (media.length) text = 'User has sent an attachment.';
+      else text = '_empty_';
+    } else if (hasImg && !text.includes('photo') && !text.includes('gif')) {
+      text = text + ' _(photo/gif)_';
+    }
     return `**${who}:** ${String(text).slice(0, 220)}`;
   });
 

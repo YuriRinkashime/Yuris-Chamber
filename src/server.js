@@ -559,7 +559,8 @@ app.get(path('/api/dms'), requireAuth, async (req, res) => {
       })),
     });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    console.error('api/dms', e);
+    res.status(500).json({ ok: false, error: e.message, threads: [] });
   }
 });
 
@@ -1480,62 +1481,49 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
 
 
 app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
+  let threads = [];
+  try {
+    const { listInbox } = await import('./services/dmInboxService.js');
+    threads = (await listInbox(discordClient)) || [];
+  } catch (e) {
+    console.error('dms page list', e);
+  }
+
+  const initial = threads.map((t) => ({
+    userId: t.userId,
+    userTag: t.userTag || t.userId,
+    userName: t.userName || (t.userTag ? String(t.userTag).split('#')[0] : null),
+    status: t.status || 'open',
+    messages: t.messages || [],
+    autoAiAt: t.autoAiAt || null,
+  }));
+
   res.send(
     layout(
       'DMs',
       `<h1>Bot DMs</h1>
       <p class="muted" id="dm-flash"></p>
-      <p class="muted">Live updates · scroll & typing stay put</p>
+      <p class="muted">Live updates · opens on latest messages · @names on dashboard</p>
       <div id="dm-list"><p class="muted">Loading…</p></div>
       <style>
         #dm-list{width:100%;max-width:100%;overflow:hidden;display:flex;flex-direction:column;gap:14px}
-        .dm-card{
-          width:100%;max-width:100%;overflow:hidden;box-sizing:border-box;
-          clip-path:none!important;border-radius:10px;padding:16px;
-        }
+        .dm-card{width:100%;box-sizing:border-box;border-radius:10px;padding:16px}
         .dm-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-        .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;color:var(--text);word-break:break-all}
-        .dm-thread{
-          display:flex;flex-direction:column;gap:10px;
-          max-height:360px;overflow-x:hidden;overflow-y:auto;
-          padding:12px;width:100%;box-sizing:border-box;
-          background:rgba(0,0,0,.35);border:1px solid var(--line);
-          border-radius:8px;
-        }
-        .bubble{
-          max-width:min(78%, 460px);padding:10px 14px;border-radius:12px;
-          font-size:13px;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;
-          box-sizing:border-box;
-        }
-        .bubble.user{
-          align-self:flex-start;margin-right:auto;
-          background:rgba(255,255,255,.07);border:1px solid var(--line);
-          border-bottom-left-radius:4px;
-        }
-        .bubble.owner,.bubble.ai{
-          align-self:flex-end;margin-left:auto;margin-right:0;
-          border-bottom-right-radius:4px;
-        }
-        .bubble.owner{
-          background:rgba(255,70,85,.28);border:1px solid rgba(255,70,85,.45);color:var(--text);
-        }
-        .bubble.ai{
-          background:rgba(15,221,163,.14);border:1px solid rgba(15,221,163,.4);color:var(--text);
-        }
+        .dm-head h2{margin:0;font-size:16px;text-transform:none;letter-spacing:0;word-break:break-all}
+        .dm-thread{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow-y:auto;padding:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px}
+        .bubble{max-width:min(78%,460px);padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.45;word-break:break-word}
+        .bubble.user{align-self:flex-start;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+        .bubble.owner{align-self:flex-end;background:rgba(255,70,85,.28);border:1px solid rgba(255,70,85,.45)}
+        .bubble.ai{align-self:flex-end;background:rgba(15,221,163,.14);border:1px solid rgba(15,221,163,.4)}
         .bubble .who{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-        .dm-actions{margin-top:12px;width:100%;box-sizing:border-box}
-        .dm-actions textarea{
-          min-height:80px;width:100%;box-sizing:border-box;border-radius:8px;
-        }
-        .dm-actions textarea:focus{border-color:var(--val);box-shadow:0 0 0 2px rgba(255,70,85,.15)}
-        .dm-actions .row{flex-wrap:wrap;margin-top:10px}
-        .dm-actions .btn:disabled{opacity:.5;cursor:wait}
+        .dm-actions{margin-top:12px}
+        .dm-actions textarea{min-height:80px;width:100%;box-sizing:border-box;border-radius:8px}
       </style>
       <script>
       const api = ${JSON.stringify(path('/api/dms'))};
       const replyUrl = ${JSON.stringify(path('/dashboard/dms/reply'))};
       const dmDelUrl = ${JSON.stringify(path('/dashboard/dms/delete'))};
-
+      let threads = ${JSON.stringify(initial).replace(/</g, '\\u003c')};
       const scrollMap = {};
       const draftMap = {};
       let activeUserId = null;
@@ -1561,102 +1549,46 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         if(!el) return;
         el.textContent = msg || '';
         el.className = isErr ? 'err' : 'ok';
-        if(msg) setTimeout(function(){ if(el.textContent===msg) el.textContent=''; }, 4000);
       }
-
       function isTyping(){
         const a = document.activeElement;
         return a && a.tagName === 'TEXTAREA' && a.hasAttribute('data-uid');
       }
-
       function saveScrollState(){
         document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
-          const uid = el.getAttribute('data-uid');
-          scrollMap[uid] = el.scrollTop;
+          scrollMap[el.getAttribute('data-uid')] = el.scrollTop;
         });
         document.querySelectorAll('textarea[data-uid]').forEach(function(el){
-          const uid = el.getAttribute('data-uid');
-          draftMap[uid] = el.value;
-          if(document.activeElement === el) activeUserId = uid;
+          draftMap[el.getAttribute('data-uid')] = el.value;
+          if(document.activeElement === el) activeUserId = el.getAttribute('data-uid');
         });
       }
-
-      function restoreScrollState(){
-        document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
-          const uid = el.getAttribute('data-uid');
-          if(scrollMap[uid] != null) el.scrollTop = scrollMap[uid];
-          else el.scrollTop = el.scrollHeight; // latest messages
-        });
-        document.querySelectorAll('textarea[data-uid]').forEach(function(el){
-          const uid = el.getAttribute('data-uid');
-          if(draftMap[uid] != null) el.value = draftMap[uid];
-          el.addEventListener('focus', function(){ activeUserId = uid; typingPauseUntil = Date.now() + 15000; });
-          el.addEventListener('input', function(){
-            draftMap[uid] = el.value;
-            typingPauseUntil = Date.now() + 15000;
-          });
-          if(uid === activeUserId){
-            try {
-              el.focus();
-              const n = el.value.length;
-              el.setSelectionRange(n, n);
-            } catch(e){}
+      function mediaHtml(m){
+        let html = '';
+        (m.media||[]).forEach(function(med){
+          const u = med.url || '';
+          const ct = (med.contentType||'').toLowerCase();
+          if(ct.indexOf('image')===0 || /\\.(png|jpe?g|gif|webp)(\\?|$)/i.test(u)){
+            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
+          } else if(ct.indexOf('video')===0 || /\\.(mp4|webm|mov)(\\?|$)/i.test(u)){
+            html += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>';
+          } else if(u){
+            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank">'+esc(med.name||'file')+'</a></div>';
           }
         });
+        return html;
       }
-
-      function fingerprint(threads){
-        return (threads||[]).map(function(t){
-          const msgs = (t.messages||[]).map(function(m){ return m.from+':'+(m.content||'')+':'+(m.at||''); }).join('|');
-          return t.userId+':'+t.status+':'+msgs;
-        }).join('##');
-      }
-
-      function render(threads, force){
-        const fp = fingerprint(threads);
-        if(!force && fp === lastFingerprint){
-          // only refresh auto-AI timers if needed
-          (threads||[]).forEach(function(t){
-            const card = document.querySelector('.dm-card[data-card="'+t.userId+'"]');
-            if(!card) return;
-            const badge = card.querySelector('.dm-head .badge');
-            if(!badge) return;
-            if(t.autoAiAt && t.status==='waiting_owner'){
-              const left = Math.max(0, Math.floor((t.autoAiAt - Date.now())/1000));
-              badge.className = 'badge off';
-              badge.textContent = 'Auto-AI '+Math.floor(left/60)+'m '+(left%60)+'s';
-            }
-          });
-          return;
-        }
-        lastFingerprint = fp;
-        saveScrollState();
+      function render(){
         const box = document.getElementById('dm-list');
         if(!threads.length){
-          box.innerHTML = '<p class="muted">No DMs yet.</p>';
+          box.innerHTML = '<div class="card"><p class="muted">No DMs yet. When someone messages the bot, threads appear here.</p></div>';
           return;
         }
         box.innerHTML = threads.map(function(t){
-          const displayName = t.userName ? ('@'+t.userName) : (t.userTag ? ('@'+String(t.userTag).split('#')[0]) : ('@'+t.userId));
+          const displayName = t.userName ? ('@'+t.userName) : (t.userTag ? ('@'+String(t.userTag).split('#')[0]) : ('user'));
           const hist = (t.messages||[]).map(function(m){
-            let mediaHtml = '';
-            (m.media||[]).forEach(function(med){
-              const u = med.url || '';
-              const ct = (med.contentType||'').toLowerCase();
-              if(ct.indexOf('image')===0 || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)){
-                mediaHtml += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
-              } else if(ct.indexOf('video')===0 || /\.(mp4|webm|mov)(\?|$)/i.test(u)){
-                mediaHtml += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>';
-              } else if(u){
-                mediaHtml += '<div style="margin-top:6px"><a class="muted" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(med.name||'attachment')+'</a></div>';
-              }
-            });
             const who = m.from==='user' ? displayName : roleLabel(m.from);
-            return '<div class="bubble '+roleClass(m.from)+'">'+
-              '<div class="who">'+esc(who)+'</div>'+
-              (m.content ? esc(m.content) : '')+
-              mediaHtml+
-            '</div>';
+            return '<div class="bubble '+roleClass(m.from)+'"><div class="who">'+esc(who)+'</div>'+(m.content?esc(m.content):'')+mediaHtml(m)+'</div>';
           }).join('');
           let timer = '';
           if(t.autoAiAt && t.status==='waiting_owner'){
@@ -1669,101 +1601,80 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
             '<div class="dm-head"><h2>'+esc(displayName)+'</h2><div class="row">'+timer+
             '<button type="button" class="btn danger" data-dm-del="'+esc(t.userId)+'" style="padding:6px 10px;font-size:11px">Delete</button></div></div>'+
             '<div class="dm-thread" data-uid="'+esc(t.userId)+'">'+hist+'</div>'+
-            '<div class="dm-actions">'+
-              '<textarea data-uid="'+esc(t.userId)+'" placeholder="Type your reply…"></textarea>'+
-              '<div class="row">'+
-                '<button type="button" class="btn" data-send="human" data-uid="'+esc(t.userId)+'">Send my words</button>'+
-                '<button type="button" class="btn secondary" data-send="ai" data-uid="'+esc(t.userId)+'">AI reply</button>'+
-              '</div>'+
-            '</div>'+
-          '</div>';
+            '<div class="dm-actions"><textarea data-uid="'+esc(t.userId)+'" placeholder="Type your reply…"></textarea>'+
+            '<div class="row" style="margin-top:10px;gap:8px">'+
+            '<button type="button" class="btn" data-send="human" data-uid="'+esc(t.userId)+'">Send my words</button>'+
+            '<button type="button" class="btn secondary" data-send="ai" data-uid="'+esc(t.userId)+'">AI reply</button>'+
+            '</div></div></div>';
         }).join('');
-        restoreScrollState();
         document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
           const uid = el.getAttribute('data-uid');
-          if(scrollMap[uid] == null) el.scrollTop = el.scrollHeight;
+          if(scrollMap[uid] != null) el.scrollTop = scrollMap[uid];
+          else el.scrollTop = el.scrollHeight;
         });
-        bindSendButtons();
+        document.querySelectorAll('textarea[data-uid]').forEach(function(el){
+          const uid = el.getAttribute('data-uid');
+          if(draftMap[uid] != null) el.value = draftMap[uid];
+          el.addEventListener('focus', function(){ activeUserId = uid; typingPauseUntil = Date.now()+15000; });
+          el.addEventListener('input', function(){ draftMap[uid]=el.value; typingPauseUntil = Date.now()+15000; });
+        });
+        bindButtons();
       }
-
-      async function sendReply(userId, mode){
-        const ta = document.querySelector('textarea[data-uid="'+userId+'"]');
-        const content = ta ? ta.value.trim() : '';
-        if(mode === 'human' && !content){
-          flash('Type a message first', true);
-          return;
-        }
-        sending = true;
-        typingPauseUntil = Date.now() + 20000;
-        const buttons = document.querySelectorAll('button[data-uid="'+userId+'"]');
-        buttons.forEach(function(b){ b.disabled = true; });
-
-        try{
-          const body = new URLSearchParams();
-          body.set('userId', userId);
-          body.set('mode', mode);
-          body.set('content', content);
-
-          const r = await fetch(replyUrl, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Accept': 'application/json',
-            },
-            body: body.toString(),
-          });
-
-          const data = await r.json().catch(function(){ return {}; });
-          if(!r.ok || data.ok === false){
-            flash(data.error || 'Send failed', true);
-          } else {
-            flash(data.message || 'Sent');
-            if(ta) ta.value = '';
-            draftMap[userId] = '';
-            scrollMap[userId] = 999999;
-            lastFingerprint = '';
-            await tick(true);
-          }
-        } catch(e){
-          flash('Network error', true);
-        } finally {
-          sending = false;
-          buttons.forEach(function(b){ b.disabled = false; });
-        }
-      }
-
-      function bindSendButtons(){
-        document.querySelectorAll('button[data-send]').forEach(function(btn){
-          btn.onclick = function(){
-            sendReply(btn.getAttribute('data-uid'), btn.getAttribute('data-send'));
+      function bindButtons(){
+        document.querySelectorAll('[data-send]').forEach(function(btn){
+          btn.onclick = async function(){
+            const uid = btn.getAttribute('data-uid');
+            const mode = btn.getAttribute('data-send');
+            const ta = document.querySelector('textarea[data-uid="'+uid+'"]');
+            const content = ta ? ta.value.trim() : '';
+            if(mode==='human' && !content){ flash('Type a message first', true); return; }
+            sending = true;
+            try{
+              const body = new URLSearchParams();
+              body.set('userId', uid);
+              body.set('mode', mode);
+              body.set('content', content);
+              const r = await fetch(replyUrl, { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, body });
+              const d = await r.json().catch(()=>({}));
+              if(!r.ok || d.ok===false){ flash(d.error||'Send failed', true); }
+              else {
+                if(ta) ta.value='';
+                draftMap[uid]='';
+                flash('Sent');
+                await refresh(true);
+              }
+            }catch(e){ flash(e.message||'error', true); }
+            sending = false;
           };
         });
-        document.querySelectorAll('button[data-dm-del]').forEach(function(btn){
-          btn.onclick = function(){
-            if(!confirm('Remove this DM thread from dashboard?')) return;
-            var body = new URLSearchParams();
-            body.set('userId', btn.getAttribute('data-dm-del'));
-            fetch(dmDelUrl, {
-              method:'POST', credentials:'same-origin',
-              headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
-              body: body.toString()
-            }).then(function(){ lastFingerprint=''; tick(true); }).catch(function(){});
+        document.querySelectorAll('[data-dm-del]').forEach(function(btn){
+          btn.onclick = async function(){
+            if(!confirm('Remove from dashboard + DB only (not Discord chat history)?')) return;
+            const uid = btn.getAttribute('data-dm-del');
+            const body = new URLSearchParams();
+            body.set('userId', uid);
+            await fetch(dmDelUrl, { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, body });
+            await refresh(true);
           };
         });
       }
-
-      async function tick(force){
-        if(!force && (sending || Date.now() < typingPauseUntil || isTyping())) return;
+      async function refresh(force){
+        if(sending || (isTyping() && Date.now() < typingPauseUntil)) return;
+        if(!force) saveScrollState();
         try{
-          const r = await fetch(api, { credentials:'same-origin' });
+          const r = await fetch(api, { credentials:'same-origin', cache:'no-store' });
           if(!r.ok) return;
           const d = await r.json();
-          render(d.threads||[], !!force);
+          const next = d.threads || [];
+          const fp = JSON.stringify(next.map(t => [t.userId, (t.messages||[]).length, t.status, t.autoAiAt]));
+          if(!force && fp === lastFingerprint) return;
+          lastFingerprint = fp;
+          threads = next;
+          render();
         }catch(e){}
       }
-      tick(true);
-      setInterval(function(){ tick(false); }, 3000);
+      render();
+      setInterval(function(){ refresh(false); }, 4000);
       </script>`,
       'dms',
     ),
