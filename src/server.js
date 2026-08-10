@@ -484,7 +484,7 @@ app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
   setTimeout(() => { try { process.exit(0); } catch (_) {} }, 600);
 });
 
-app.get('/health, (req, res) => res.json({ status: 'healthy' }));
+app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 app.get('/ready', (req, res) => {
   res.json({
     ready: true,
