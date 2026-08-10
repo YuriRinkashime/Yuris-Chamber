@@ -37,8 +37,44 @@ export default {
             name: a.name || 'file',
             contentType: a.contentType || '',
           }));
-          const content = (message.content || '').trim();
-          // Allow media-only DMs (previously ignored when content empty)
+          // Also pick GIF/image links from message text (Tenor, Giphy, Klipy, Discord CDN, etc.)
+          const contentRaw = message.content || '';
+          const urlRe = /https?:\/\/[^\s<>\]]+/gi;
+          const found = contentRaw.match(urlRe) || [];
+          for (const u of found) {
+            const low = u.toLowerCase();
+            const isGif =
+              /\.(gif)(\?|$)/i.test(low) ||
+              /tenor\.com|giphy\.com|klipy\.com|media\.tenor|c\.tenor|discordapp\.net\/gifs|imgur\.com\/.*\.gif/i.test(low);
+            const isImg =
+              /\.(png|jpe?g|webp|gif)(\?|$)/i.test(low) ||
+              isGif ||
+              /media\.discordapp\.net|cdn\.discordapp\.com/i.test(low);
+            if (isImg || isGif) {
+              atts.push({
+                url: u,
+                name: isGif ? 'gif.gif' : 'image',
+                contentType: isGif ? 'image/gif' : 'image/png',
+              });
+            }
+          }
+          // Embeds (Discord unfurled gifs)
+          for (const emb of message.embeds || []) {
+            const u = emb.image?.url || emb.thumbnail?.url || emb.video?.url || emb.url;
+            if (!u) continue;
+            const low = String(u).toLowerCase();
+            const isGif = /\.(gif)(\?|$)/i.test(low) || /tenor|giphy|klipy/i.test(low);
+            atts.push({
+              url: u,
+              name: isGif ? 'gif.gif' : 'embed',
+              contentType: isGif ? 'image/gif' : (emb.video ? 'video/mp4' : 'image/png'),
+            });
+          }
+          let content = contentRaw.trim();
+          // Strip bare media URLs from text so card can say photo/gif cleanly
+          if (atts.length) {
+            content = content.replace(urlRe, '').trim();
+          }
           if (!content && !atts.length) return;
 
           const hasVideo = atts.some((a) => {

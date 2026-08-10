@@ -485,8 +485,25 @@ app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
 });
 
 app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
-  res.send(layout('Restart', '<div class="card"><p class="ok">Restarting… The host should bring the panel back automatically.</p></div>', 'dashboard'));
-  setTimeout(() => { try { process.exit(0); } catch (_) {} }, 600);
+  res.send(layout(
+    'Restart',
+    `<div class="card">
+      <p class="ok"><strong>Restart signal sent</strong> (crash-exit so Bot-Hosting can auto-start).</p>
+      <p class="muted">If status stays <strong>Stopped</strong>, open Bot-Hosting and press <strong>Start</strong>.</p>
+      <p id="rs" class="muted">Checking…</p>
+      <script>
+        setInterval(async function(){
+          try {
+            var r = await fetch(${JSON.stringify(path('/health'))}, { cache: 'no-store' });
+            if (r.ok) location.href = ${JSON.stringify(path('/dashboard'))};
+          } catch (e) {}
+        }, 5000);
+        setTimeout(function(){ location.replace(location.pathname + '?_=' + Date.now()); }, 90000);
+      </script>
+    </div>`,
+    'dashboard',
+  ));
+  setTimeout(function(){ try { process.exit(1); } catch (e) {} }, 900);
 });
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
@@ -1563,17 +1580,29 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           if(document.activeElement === el) activeUserId = el.getAttribute('data-uid');
         });
       }
-      function mediaHtml(m){
+            function mediaHtml(m){
         let html = '';
         (m.media||[]).forEach(function(med){
           const u = med.url || '';
           const ct = (med.contentType||'').toLowerCase();
-          if(ct.indexOf('image')===0 || /\\.(png|jpe?g|gif|webp)(\\?|$)/i.test(u)){
-            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
-          } else if(ct.indexOf('video')===0 || /\\.(mp4|webm|mov)(\\?|$)/i.test(u)){
+          const low = u.toLowerCase();
+          const isGif = ct.indexOf('gif')>=0 || /\.gif(\?|$)/i.test(low) || /tenor\.|giphy\.|klipy\./i.test(low);
+          const isImg = ct.indexOf('image')===0 || isGif || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(low) || /media\.discordapp|cdn\.discordapp/i.test(low);
+          if(isImg){
+            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="gif" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
+          } else if(ct.indexOf('video')===0 || /\.(mp4|webm|mov)(\?|$)/i.test(low)){
             html += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>';
           } else if(u){
             html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank">'+esc(med.name||'file')+'</a></div>';
+          }
+        });
+        // Also detect bare gif URLs left in text content
+        const text = m.content || '';
+        const urls = text.match(/https?:\/\/[^\s]+/gi) || [];
+        urls.forEach(function(u){
+          const low = u.toLowerCase();
+          if(/\.gif(\?|$)/i.test(low) || /tenor\.|giphy\.|klipy\./i.test(low)){
+            html += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="gif" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
           }
         });
         return html;
