@@ -479,14 +479,57 @@ ${
 </html>`;
 }
 
-app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
-  res.send(layout('Stopped', '<div class="card"><p class="err">Bot process stopping. Use your host panel to Start again if it does not auto-restart.</p></div>', 'dashboard'));
-  setTimeout(() => { try { process.exit(1); } catch (_) {} }, 500);
+app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
+  // Bot-Hosting: exit(0) = clean Stop (stays offline). exit(1) = crash path (often auto-restarts).
+  const html = layout(
+    'Restart',
+    `<div class="card">
+      <p class="ok"><strong>Restart signal sent.</strong></p>
+      <p class="muted">Bot-Hosting often treats a clean exit as <strong>Stopped</strong>.</p>
+      <ol class="muted" style="margin:12px 0 12px 18px;line-height:1.6">
+        <li>Wait ~10–20 seconds.</li>
+        <li>If this page stays offline, open <strong>Bot-Hosting → your bot → Start</strong> (green button).</li>
+        <li>Then reload this dashboard.</li>
+      </ol>
+      <p class="muted">Auto-checking every 5s…</p>
+      <p id="rs">Waiting for bot…</p>
+      <script>
+        let n=0;
+        setInterval(async()=>{
+          n++;
+          const el=document.getElementById('rs');
+          try{
+            const r=await fetch(${JSON.stringify(path('/health'))}, {cache:'no-store'});
+            if(r.ok){
+              el.textContent='Bot is back — redirecting…';
+              location.href=${JSON.stringify(path('/dashboard'))};
+              return;
+            }
+          }catch(e){}
+          el.textContent='Still offline (try '+n+'). Use Bot-Hosting Start if this continues.';
+        },5000);
+      </script>
+    </div>`,
+    'dashboard',
+  );
+  res.send(html);
+  setTimeout(() => {
+    try { process.exit(1); } catch (_) {}
+  }, 900);
 });
 
-app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
-  res.send(layout('Restart', '<div class="card"><p class="ok">Restarting… The host should bring the panel back automatically.</p></div>', 'dashboard'));
-  setTimeout(() => { try { process.exit(0); } catch (_) {} }, 600);
+app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
+  res.send(layout(
+    'Stopped',
+    `<div class="card">
+      <p class="err"><strong>Stop signal sent.</strong> Process will go offline.</p>
+      <p class="muted">To run again: Bot-Hosting panel → <strong>Start</strong>.</p>
+    </div>`,
+    'dashboard',
+  ));
+  setTimeout(() => {
+    try { process.exit(0); } catch (_) {}
+  }, 700);
 });
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
@@ -732,7 +775,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
       </div>
         <div class="card" id="process-controls" style="margin-top:16px;border-color:rgba(255,70,85,.3)">
           <h2>Process controls</h2>
-          <p class="muted">Host must auto-restart after stop/restart. Start = wake process if host supports it.</p>
+          <p class="muted">Restart tries a crash-exit so Bot-Hosting may auto-start again. If status stays <strong>Stopped</strong>, press <strong>Start</strong> in Bot-Hosting. Stop always stays offline until you Start there.</p>
           <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
             <form method="POST" action="${path('/dashboard/restart')}" onsubmit="return confirm('Restart bot now?')">
               <button class="btn" type="submit">Restart</button>
