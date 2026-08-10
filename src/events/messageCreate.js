@@ -36,7 +36,12 @@ export default {
           if (!content) return;
 
           cancelAutoAi(message.author.id);
-          await appendUserDm(client, message.author, content);
+          const atts = [...(message.attachments?.values?.() || message.attachments || [])].map((a) => ({
+            url: a.url,
+            name: a.name,
+            contentType: a.contentType,
+          }));
+          await appendUserDm(client, message.author, content || (atts.length ? '[attachment]' : ''), atts);
           scheduleAutoAi(client, message.author.id);
 
           // ALWAYS refresh the Discord card (even if sender is owner — for testing)

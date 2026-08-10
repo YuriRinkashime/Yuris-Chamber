@@ -38,6 +38,7 @@ export async function listInbox(client) {
   return out;
 }
 
+/** Dashboard delete: clears Mongo thread + owner notify card only. Does NOT wipe user DM history in Discord. */
 export async function deleteThread(client, userId) {
   const id = String(userId);
   cancelAutoAi(id);
@@ -88,17 +89,25 @@ export async function syncInboxDeleted(client) {
 }
 
 
-export async function appendUserDm(client, user, content) {
+export async function appendUserDm(client, user, content, attachments = []) {
   const thread = await getThread(client, user.id);
-  thread.userTag = user.tag;
+  thread.userTag = user.tag || user.username || thread.userTag;
+  thread.userName = user.username || thread.userName || null;
   thread.messages = thread.messages || [];
+  const media = (attachments || []).slice(0, 8).map((a) => ({
+    url: a.url || a.proxyURL || a,
+    name: a.name || 'file',
+    contentType: a.contentType || a.content_type || '',
+  }));
   thread.messages.push({
     from: 'user',
-    content: String(content).slice(0, 1800),
-    at: Date.now() });
+    content: String(content || '').slice(0, 1800),
+    media,
+    at: Date.now(),
+  });
   thread.status = 'waiting_owner';
   thread.autoAiAt = Date.now() + AUTO_AI_MS;
-  thread.messages = thread.messages.slice(-30);
+  thread.messages = thread.messages.slice(-200);
   await saveThread(client, thread);
   return thread;
 }
@@ -112,7 +121,7 @@ export async function appendBotDm(client, userId, content, by = 'owner') {
     at: Date.now() });
   thread.status = 'open';
   thread.autoAiAt = null;
-  thread.messages = thread.messages.slice(-30);
+  thread.messages = thread.messages.slice(-200);
   await saveThread(client, thread);
   return thread;
 }

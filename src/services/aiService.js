@@ -254,7 +254,7 @@ export async function generateDmReply(client, userId, userMessage) {
       `\n\nYou are in a private DM as Yuri for BANORANT CAFE.` +
       `\n${serverCtx}` +
       `\nUse the conversation history. Do not re-ask language preference if already set.` +
-      `\nBe short, friendly, Gen Z. Remember what THIS user already told you.` +
+      `\nBe natural, chill, slightly nonchalant Gen Z. Remember EVERYTHING THIS user already told you in history. Never mix other users. Prefer concrete answers over filler. If unsure, ask one short question.` +
       `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output the text USER_ID or <@USER_ID>.`,
   );
 

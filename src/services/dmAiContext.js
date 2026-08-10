@@ -57,12 +57,12 @@ export async function getMergedAiHistory(client, userId) {
     } catch (_) {}
   }
 
-  return all.slice(-12);
+  return all.slice(-50);
 }
 
 export async function saveDmAiHistory(client, userId, messages) {
   await client.db.set(`dm:ai:history:${userId}`, {
-    messages: messages.slice(-12),
+    messages: messages.slice(-80),
     updatedAt: Date.now(),
   });
 }
