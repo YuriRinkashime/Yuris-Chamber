@@ -32,25 +32,42 @@ export default {
             upsertOwnerNotify } = await import('../services/dmInboxService.js');
           const { isBotOwner } = await import('../config/bot.js');
 
-          const content = message.content?.trim();
-          if (!content) return;
+          const atts = [...(message.attachments?.values?.() || [])].map((a) => ({
+            url: a.url || a.proxyURL,
+            name: a.name || 'file',
+            contentType: a.contentType || '',
+          }));
+          const content = (message.content || '').trim();
+          // Allow media-only DMs (previously ignored when content empty)
+          if (!content && !atts.length) return;
+
+          const hasVideo = atts.some((a) => {
+            const ct = (a.contentType || '').toLowerCase();
+            const n = (a.name || a.url || '').toLowerCase();
+            return ct.startsWith('video') || /\.(mp4|webm|mov|mkv)(\?|$)/i.test(n);
+          });
+          if (hasVideo) {
+            await message.channel
+              .send({
+                content: "I can't view videos, only pictures and gifs.",
+              })
+              .catch(() => {});
+          }
 
           cancelAutoAi(message.author.id);
-          const atts = [...(message.attachments?.values?.() || message.attachments || [])].map((a) => ({
-            url: a.url,
-            name: a.name,
-            contentType: a.contentType,
-          }));
-          await appendUserDm(client, message.author, content || (atts.length ? '[attachment]' : ''), atts);
+          await appendUserDm(
+            client,
+            message.author,
+            content || (atts.length ? (hasVideo ? '[video]' : '[attachment]') : ''),
+            atts,
+          );
           scheduleAutoAi(client, message.author.id);
 
-          // ALWAYS refresh the Discord card (even if sender is owner — for testing)
           await upsertOwnerNotify(client, message.author.id, {
             disableButtons: false,
-            footer: 'New message · AI reply or your words' });
+            footer: 'New message · AI reply or your words',
+          });
 
-          // Don't also spam other owners if the sender is an owner
-          // (upsert already DMs/edits for OWNER_IDS)
           return;
         } catch (e) {
           logger.error('DM inbox error:', e);

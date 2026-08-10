@@ -108,6 +108,8 @@ export async function appendUserDm(client, user, content, attachments = []) {
   thread.status = 'waiting_owner';
   thread.autoAiAt = Date.now() + AUTO_AI_MS;
   thread.messages = thread.messages.slice(-200);
+  const PAGE = 8;
+  thread.cardPage = Math.max(0, Math.ceil(thread.messages.length / PAGE) - 1);
   await saveThread(client, thread);
   return thread;
 }
@@ -285,6 +287,11 @@ export async function upsertOwnerNotify(
       .setCustomId(`dm_page:${userId}:next`)
       .setLabel('Newer ▶')
       .setStyle(ButtonStyle.Secondary)
+      .setDisabled(totalPages <= 1 || (thread.cardPage || 0) >= totalPages - 1),
+    new ButtonBuilder()
+      .setCustomId(`dm_page:${userId}:latest`)
+      .setLabel('Jump to latest')
+      .setStyle(ButtonStyle.Success)
       .setDisabled(totalPages <= 1 || (thread.cardPage || 0) >= totalPages - 1),
   );
 

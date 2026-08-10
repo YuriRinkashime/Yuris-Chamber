@@ -479,57 +479,14 @@ ${
 </html>`;
 }
 
-app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
-  // Bot-Hosting: exit(0) = clean Stop (stays offline). exit(1) = crash path (often auto-restarts).
-  const html = layout(
-    'Restart',
-    `<div class="card">
-      <p class="ok"><strong>Restart signal sent.</strong></p>
-      <p class="muted">Bot-Hosting often treats a clean exit as <strong>Stopped</strong>.</p>
-      <ol class="muted" style="margin:12px 0 12px 18px;line-height:1.6">
-        <li>Wait ~10–20 seconds.</li>
-        <li>If this page stays offline, open <strong>Bot-Hosting → your bot → Start</strong> (green button).</li>
-        <li>Then reload this dashboard.</li>
-      </ol>
-      <p class="muted">Auto-checking every 5s…</p>
-      <p id="rs">Waiting for bot…</p>
-      <script>
-        let n=0;
-        setInterval(async()=>{
-          n++;
-          const el=document.getElementById('rs');
-          try{
-            const r=await fetch(${JSON.stringify(path('/health'))}, {cache:'no-store'});
-            if(r.ok){
-              el.textContent='Bot is back — redirecting…';
-              location.href=${JSON.stringify(path('/dashboard'))};
-              return;
-            }
-          }catch(e){}
-          el.textContent='Still offline (try '+n+'). Use Bot-Hosting Start if this continues.';
-        },5000);
-      </script>
-    </div>`,
-    'dashboard',
-  );
-  res.send(html);
-  setTimeout(() => {
-    try { process.exit(1); } catch (_) {}
-  }, 900);
+app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
+  res.send(layout('Stopped', '<div class="card"><p class="err">Bot process stopping. Use your host panel to Start again if it does not auto-restart.</p></div>', 'dashboard'));
+  setTimeout(() => { try { process.exit(1); } catch (_) {} }, 500);
 });
 
-app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
-  res.send(layout(
-    'Stopped',
-    `<div class="card">
-      <p class="err"><strong>Stop signal sent.</strong> Process will go offline.</p>
-      <p class="muted">To run again: Bot-Hosting panel → <strong>Start</strong>.</p>
-    </div>`,
-    'dashboard',
-  ));
-  setTimeout(() => {
-    try { process.exit(0); } catch (_) {}
-  }, 700);
+app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
+  res.send(layout('Restart', '<div class="card"><p class="ok">Restarting… The host should bring the panel back automatically.</p></div>', 'dashboard'));
+  setTimeout(() => { try { process.exit(0); } catch (_) {} }, 600);
 });
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
@@ -775,7 +732,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
       </div>
         <div class="card" id="process-controls" style="margin-top:16px;border-color:rgba(255,70,85,.3)">
           <h2>Process controls</h2>
-          <p class="muted">Restart tries a crash-exit so Bot-Hosting may auto-start again. If status stays <strong>Stopped</strong>, press <strong>Start</strong> in Bot-Hosting. Stop always stays offline until you Start there.</p>
+          <p class="muted">Host must auto-restart after stop/restart. Start = wake process if host supports it.</p>
           <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
             <form method="POST" action="${path('/dashboard/restart')}" onsubmit="return confirm('Restart bot now?')">
               <button class="btn" type="submit">Restart</button>
@@ -1159,59 +1116,65 @@ app.post(path('/dashboard/dms/delete'), requireAuth, async (req, res) => {
 
 
 app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
+  // Server-side load so page never sticks on "Loading…"
+  let items = [];
+  try {
+    if (discordClient?.db?.list) {
+      const keys = (await discordClient.db.list('giveaway:').catch(() => [])) || [];
+      for (const k of keys.slice(0, 80)) {
+        if (typeof k !== 'string' || (k.match(/:/g) || []).length !== 1) continue;
+        const g = await discordClient.db.get(k, null);
+        if (!g || typeof g !== 'object') continue;
+        if (!(g.prize || g.messageId || g.endsAt)) continue;
+        items.push({
+          key: k,
+          prize: g.prize,
+          ended: !!(g.ended || g.isEnded),
+          endsAt: g.endsAt || g.endTime || null,
+          entrants: g.entrants || g.participants || [],
+          winners: g.winners || g.winnerCount || 1,
+          winnerIds: g.winnerIds || [],
+        });
+      }
+    }
+  } catch (e) {
+    console.error('giveaways page', e);
+  }
+  items.sort((a, b) => (b.endsAt || 0) - (a.endsAt || 0));
+
+  const cards = items.length
+    ? items.map((g) => {
+        const ends = g.endsAt ? new Date(g.endsAt).toLocaleString() : '—';
+        const entries = (g.entrants || []).length;
+        const winners = (g.winnerIds || []).map((id) => escapeHtml('@' + id)).join(', ') || (g.ended ? '<em>none</em>' : '—');
+        return `<div class="card">
+          <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <h2 style="text-transform:none;letter-spacing:0;font-size:15px;margin:0">${escapeHtml(g.prize || g.key)}</h2>
+            <span class="badge ${g.ended ? 'off' : 'on'}">${g.ended ? 'ENDED' : 'ACTIVE'}</span>
+          </div>
+          <p class="muted">Ends: ${escapeHtml(ends)} · Entries: ${entries} · Winner slots: ${g.winners || 1}</p>
+          ${g.ended ? `<p class="muted">Winners: ${winners}</p>` : ''}
+          <div class="row" style="gap:8px;margin-top:10px">
+            ${g.ended ? '' : `<form method="POST" action="${path('/dashboard/giveaways/end')}" style="display:inline">
+              <input type="hidden" name="key" value="${escapeHtml(g.key)}"/>
+              <button class="btn" type="submit">End</button></form>`}
+            <form method="POST" action="${path('/dashboard/giveaways/delete')}" style="display:inline" onsubmit="return confirm('Delete giveaway + winner message?')">
+              <input type="hidden" name="key" value="${escapeHtml(g.key)}"/>
+              <button class="btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div class="card"><p class="muted">No giveaways in database.</p></div>';
+
   res.send(
     layout(
       'Giveaways',
       `<h1>Giveaways</h1>
-      <div class="banner"><div class="cap">Giveaway chamber<small>Auto-refresh · End / Delete syncs Discord + Mongo</small></div></div>
-      <div id="gw-root"><p class="muted">Loading…</p></div>
+      <div class="banner"><div class="cap">Giveaway chamber<small>Server-rendered · auto-refresh every 8s</small></div></div>
+      <div id="gw-root">${cards}</div>
       <script>
-      const api = ${JSON.stringify(path('/api/giveaways'))};
-      const endUrl = ${JSON.stringify(path('/dashboard/giveaways/end'))};
-      const delUrl = ${JSON.stringify(path('/dashboard/giveaways/delete'))};
-      function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-      async function load() {
-        const root = document.getElementById('gw-root');
-        try {
-          const ctrl = new AbortController();
-          const to = setTimeout(() => ctrl.abort(), 8000);
-          const r = await fetch(api, { credentials: 'same-origin', signal: ctrl.signal });
-          clearTimeout(to);
-          if (!r.ok) {
-            root.innerHTML = '<div class="card"><p class="err">Failed to load giveaways (HTTP '+r.status+').</p></div>';
-            return;
-          }
-          const d = await r.json();
-          const items = d.items || [];
-          if (!items.length) {
-            root.innerHTML = '<div class="card"><p class="muted">No giveaways in database.</p></div>';
-            return;
-          }
-          root.innerHTML = items.map(g => {
-            const ended = g.ended || g.isEnded;
-            const ends = g.endsAt ? new Date(g.endsAt).toLocaleString() : '—';
-            const entries = (g.entrants || g.participants || []).length;
-            const winners = (g.winnerIds || []).map(id => '<span class=muted>@'+id+'</span>').join(', ') || (ended ? '<em>none</em>' : '—');
-            const winnersHtml = ended
-              ? '<p class="muted">Winners: ' + winners + '</p>'
-              : '';
-            return '<div class="card">' +
-              '<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">' +
-              '<h2 style="text-transform:none;letter-spacing:0;font-size:15px;margin:0">' + esc(g.prize||g.key) + '</h2>' +
-              '<span class="badge ' + (ended?'off':'on') + '">' + (ended?'ENDED':'ACTIVE') + '</span></div>' +
-              '<p class="muted">Ends: ' + esc(ends) + ' · Entries: ' + entries + ' · Winner slots: ' + (g.winners||g.winnerCount||1) + '</p>' +
-              winnersHtml +
-              '<div class="row" style="gap:8px;margin-top:10px">' +
-              (ended ? '' : '<form method="POST" action="'+endUrl+'" style="display:inline"><input type="hidden" name="key" value="'+esc(g.key)+'"/><button class="btn" type="submit">End</button></form>') +
-              '<form method="POST" action="'+delUrl+'" style="display:inline" onsubmit="return confirm(\'Delete giveaway + winner message from Discord & Mongo?\')"><input type="hidden" name="key" value="'+esc(g.key)+'"/><button class="btn danger" type="submit">Delete</button></form>' +
-              '</div></div>';
-          }).join('');
-        } catch (e) {
-          root.innerHTML = '<div class="card"><p class="err">Giveaways error: '+(e.message||e)+'</p><p class="muted">Retrying…</p></div>';
-        }
-      }
-      load();
-      setInterval(load, 5000);
+      setTimeout(function(){ location.reload(); }, 8000);
       </script>`,
       'giveaways',
     ),
@@ -1622,6 +1585,7 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
           const uid = el.getAttribute('data-uid');
           if(scrollMap[uid] != null) el.scrollTop = scrollMap[uid];
+          else el.scrollTop = el.scrollHeight; // latest messages
         });
         document.querySelectorAll('textarea[data-uid]').forEach(function(el){
           const uid = el.getAttribute('data-uid');
@@ -1673,10 +1637,25 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           return;
         }
         box.innerHTML = threads.map(function(t){
+          const displayName = t.userName ? ('@'+t.userName) : (t.userTag ? ('@'+String(t.userTag).split('#')[0]) : ('@'+t.userId));
           const hist = (t.messages||[]).map(function(m){
+            let mediaHtml = '';
+            (m.media||[]).forEach(function(med){
+              const u = med.url || '';
+              const ct = (med.contentType||'').toLowerCase();
+              if(ct.indexOf('image')===0 || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)){
+                mediaHtml += '<div style="margin-top:6px"><a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--line)" loading="lazy"/></a></div>';
+              } else if(ct.indexOf('video')===0 || /\.(mp4|webm|mov)(\?|$)/i.test(u)){
+                mediaHtml += '<div style="margin-top:6px"><video src="'+esc(u)+'" controls style="max-width:100%;max-height:260px;border-radius:8px"></video></div>';
+              } else if(u){
+                mediaHtml += '<div style="margin-top:6px"><a class="muted" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(med.name||'attachment')+'</a></div>';
+              }
+            });
+            const who = m.from==='user' ? displayName : roleLabel(m.from);
             return '<div class="bubble '+roleClass(m.from)+'">'+
-              '<div class="who">'+esc(roleLabel(m.from))+'</div>'+
-              esc(m.content)+
+              '<div class="who">'+esc(who)+'</div>'+
+              (m.content ? esc(m.content) : '')+
+              mediaHtml+
             '</div>';
           }).join('');
           let timer = '';
@@ -1687,7 +1666,7 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
             timer = '<span class="badge on">'+esc(t.status||'open')+'</span>';
           }
           return '<div class="card dm-card" data-card="'+esc(t.userId)+'">'+
-            '<div class="dm-head"><h2>'+esc(t.userTag)+'</h2><div class="row">'+timer+
+            '<div class="dm-head"><h2>'+esc(displayName)+'</h2><div class="row">'+timer+
             '<button type="button" class="btn danger" data-dm-del="'+esc(t.userId)+'" style="padding:6px 10px;font-size:11px">Delete</button></div></div>'+
             '<div class="dm-thread" data-uid="'+esc(t.userId)+'">'+hist+'</div>'+
             '<div class="dm-actions">'+
@@ -1700,6 +1679,10 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
           '</div>';
         }).join('');
         restoreScrollState();
+        document.querySelectorAll('.dm-thread[data-uid]').forEach(function(el){
+          const uid = el.getAttribute('data-uid');
+          if(scrollMap[uid] == null) el.scrollTop = el.scrollHeight;
+        });
         bindSendButtons();
       }
 
