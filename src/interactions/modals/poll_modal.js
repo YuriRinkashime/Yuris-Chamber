@@ -6,6 +6,7 @@ import {
   buildPollButtons,
   upsertOwnerPollCard,
 } from '../../services/pollService.js';
+import { parseFlexibleDurationSeconds } from '../../utils/duration.js';
 
 export default {
   name: 'poll_modal',
@@ -15,29 +16,21 @@ export default {
     const rawOptions = interaction.fields.getTextInputValue('options');
     const durationRaw = interaction.fields.getTextInputValue('duration').trim();
 
-    // duration: "5" = 5 minutes, "90s" = 90 seconds, "1m30s" or "1:30"
-    function parseDuration(str) {
-      const s = String(str).trim().toLowerCase();
-      let total = 0;
-      const m1 = s.match(/^(\d+)\s*:\s*(\d+)$/); // m:ss
-      if (m1) return parseInt(m1[1], 10) * 60 + parseInt(m1[2], 10);
-      const m2 = s.match(/^(\d+)\s*m(?:in(?:ute)?s?)?\s*(\d+)\s*s(?:ec(?:ond)?s?)?$/);
-      if (m2) return parseInt(m2[1], 10) * 60 + parseInt(m2[2], 10);
-      if (/^\d+\s*s(ec(ond)?s?)?$/.test(s)) return parseInt(s, 10);
-      if (/^\d+\s*m(in(ute)?s?)?$/.test(s)) return parseInt(s, 10) * 60;
-      if (/^\d+$/.test(s)) return parseInt(s, 10) * 60; // bare number = minutes
-      return NaN;
-    }
-
-    const totalSec = parseDuration(durationRaw);
-    if (!Number.isFinite(totalSec) || totalSec < 10 || totalSec > 10080 * 60) {
+    let totalSec;
+    try {
+      totalSec = parseFlexibleDurationSeconds(durationRaw, {
+        minMs: 10_000,
+        maxMs: 365 * 86_400_000,
+      });
+    } catch (e) {
       return interaction.reply({
         content:
-          'Duration invalid. Use **10+ seconds**.\n' +
-          'Examples: `5` (5 min), `90s`, `1:30`, `2m30s`',
+          'Duration invalid: ' + e.message + '\n' +
+          'Examples: `5` (5 min), `90s`, `2h`, `1d`, `1w`, `2mo`, `1y`, `1d12h`',
         flags: MessageFlags.Ephemeral,
       });
     }
+
 
     const labels = rawOptions
       .split(/\r?\n|\|/)

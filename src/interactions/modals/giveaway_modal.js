@@ -103,7 +103,9 @@ export default {
 
     await interaction.client.db.set(`giveaway:${giveawayId}`, record);
 
-    const wait = Math.max(0, endsAt - Date.now());
+    // Node setTimeout max ~24.8 days; longer giveaways are ended by the periodic scanner
+    const MAX_TIMEOUT = 2147483647;
+    const wait = Math.max(0, Math.min(endsAt - Date.now(), MAX_TIMEOUT));
     setTimeout(() => {
       endSimpleGiveaway(interaction.client, giveawayId).catch(() => {});
     }, wait);

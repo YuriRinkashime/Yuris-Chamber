@@ -1,3 +1,4 @@
+import { parseFlexibleDuration } from '../../utils/duration.js';
 import {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -81,10 +82,10 @@ export default {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('duration')
-          .setLabel('Duration (10s–30d) e.g. 30m 2h 1d')
+          .setLabel('Duration e.g. 2h / 1d / 1w / 1mo / 1y')
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
-          .setMaxLength(10),
+          .setMaxLength(20),
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
@@ -110,17 +111,11 @@ export default {
 };
 
 export function parseDuration(str) {
-  const m = String(str || '')
-    .trim()
-    .match(/^(\d+)\s*([smhd])$/i);
-  if (!m) throw new Error('Use duration like 30m, 2h, 1d, or 45s');
-  const n = parseInt(m[1], 10);
-  const u = m[2].toLowerCase();
-  const mult = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[u];
-  const ms = n * mult;
-  if (ms < 10_000) throw new Error('Minimum duration is 10 seconds');
-  if (ms > 30 * 86_400_000) throw new Error('Maximum duration is 30 days');
-  return ms;
+  // Supports 30s, 5m, 2h, 1d, 1w, 2mo, 1y, 1d12h — max 1 year
+  return parseFlexibleDuration(str, {
+    minMs: 10_000,
+    maxMs: 365 * 86_400_000,
+  });
 }
 
 export async function endSimpleGiveaway(client, giveawayId) {

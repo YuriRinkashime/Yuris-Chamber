@@ -48,12 +48,12 @@ export default {
 
     const duration = new TextInputBuilder()
       .setCustomId('duration')
-      .setLabel('Duration (5 / 90s / 1:30 / 2m30s)')
+      .setLabel('Duration (5m / 2h / 1d / 1w / 1mo / 1y)')
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
-      .setMaxLength(20)
-      .setPlaceholder('60s or 5 or 1:30')
-      .setValue('5');
+      .setMaxLength(24)
+      .setPlaceholder('e.g. 1d or 2h30m or 1w')
+      .setValue('1h');
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(question),
