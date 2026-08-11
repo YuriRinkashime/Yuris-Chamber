@@ -296,12 +296,15 @@ export default {
                 `\nThey asked you to continue in #${targetChannel.name}. Answer fully; the bot will post there.`;
             }
 
+            const chosen = await resolveUserModel(client, guildId, userId);
             let answer = await generateReply({
               systemInstructions,
               userMessage,
-              model: config.model,
+              model: chosen.model,
+              modelId: chosen.id,
+              provider: chosen.provider,
               history,
-              imageUrls,
+              imageUrls: chosen.vision ? imageUrls : [],
             });
 
             answer = String(answer || '')

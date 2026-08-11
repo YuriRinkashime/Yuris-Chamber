@@ -5,25 +5,109 @@ const DEFAULT_INSTRUCTIONS =
 
 const HISTORY_LIMIT = 12;
 
+/** Catalog of selectable models (dashboard default + /aimodel) */
+export const AI_MODELS = [
+  {
+    id: 'cosmosrp-2.1',
+    label: 'CosmosRP V2.1 (Vision · Roleplay)',
+    provider: 'pawan',
+    model: 'cosmosrp',
+    vision: true,
+    free: true,
+    note: 'Pawan.Krd — vision + RP optimized',
+  },
+  {
+    id: 'gemma-4-26b-free',
+    label: 'Gemma 4 26B A4B (Free · OpenRouter)',
+    provider: 'openrouter',
+    model: 'google/gemma-4-26b-a4b-it:free',
+    vision: true,
+    free: true,
+    note: 'OpenRouter free tier — multimodal',
+  },
+  {
+    id: 'naga-llama-free',
+    label: 'Llama 3.3 70B (Naga free)',
+    provider: 'naga',
+    model: 'llama-3.3-70b-instruct:free',
+    vision: false,
+    free: true,
+    note: 'Text only',
+  },
+  {
+    id: 'openai-gpt-4o-mini',
+    label: 'GPT-4o mini (OpenAI)',
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    vision: true,
+    free: false,
+    note: 'Requires OPENAI_API_KEY',
+  },
+  {
+    id: 'gemini-flash',
+    label: 'Gemini 2.0 Flash',
+    provider: 'gemini',
+    model: 'gemini-2.0-flash',
+    vision: true,
+    free: false,
+    note: 'Requires GEMINI_API_KEY',
+  },
+];
+
+export function listAiModels() {
+  return AI_MODELS.map(({ id, label, vision, free, note, provider }) => ({
+    id,
+    label,
+    vision,
+    free,
+    note,
+    provider,
+  }));
+}
+
+export function findAiModel(idOrName) {
+  if (!idOrName) return null;
+  const q = String(idOrName).trim().toLowerCase();
+  return (
+    AI_MODELS.find((m) => m.id.toLowerCase() === q) ||
+    AI_MODELS.find((m) => m.model.toLowerCase() === q) ||
+    AI_MODELS.find((m) => m.label.toLowerCase().includes(q)) ||
+    null
+  );
+}
+
+function defaultModelId() {
+  const fromEnv = process.env.AI_DEFAULT_MODEL_ID;
+  if (fromEnv && findAiModel(fromEnv)) return fromEnv;
+  // Prefer vision-capable free models
+  return 'cosmosrp-2.1';
+}
+
+
 function provider() {
   return (process.env.AI_PROVIDER || 'naga').toLowerCase();
 }
 
 function defaultModel() {
-  if (provider() === 'gemini') return 'gemini-2.0-flash';
-  if (provider() === 'openai') return 'gpt-4o-mini';
-  return 'llama-3.3-70b-instruct:free';
+  const m = findAiModel(defaultModelId());
+  return m?.model || 'llama-3.3-70b-instruct:free';
 }
 
 export async function getAiConfig(client, guildId) {
   const key = `guild:${guildId}:ai`;
   const data = (await client.db?.get(key, null)) || null;
+  const modelId = data?.modelId || defaultModelId();
+  const catalog = findAiModel(modelId) || findAiModel(data?.model) || findAiModel(defaultModelId());
   return {
     enabled: data?.enabled ?? process.env.AI_ENABLED === 'true',
     systemInstructions: data?.systemInstructions || DEFAULT_INSTRUCTIONS,
-    model: data?.model || defaultModel(),
-    maxReplyLength: data?.maxReplyLength || 1800 };
+    modelId: catalog?.id || modelId,
+    model: catalog?.model || data?.model || defaultModel(),
+    provider: catalog?.provider || provider(),
+    maxReplyLength: data?.maxReplyLength || 1800,
+  };
 }
+
 
 export async function saveAiConfig(client, guildId, partial) {
   const current = await getAiConfig(client, guildId);
@@ -71,9 +155,25 @@ export async function getUserAiPrefs(client, guildId, userId) {
   return (
     (await client.db.get(prefsKey(guildId, userId), null)) || {
       language: null,
-      customStyle: null }
+      customStyle: null,
+      modelId: null, // null = use server default
+    }
   );
 }
+
+/** Resolve which catalog model a user should use (user override → server default) */
+export async function resolveUserModel(client, guildId, userId) {
+  const prefs = await getUserAiPrefs(client, guildId, userId);
+  const guild = await getAiConfig(client, guildId);
+  const chosen =
+    findAiModel(prefs.modelId) ||
+    findAiModel(guild.modelId) ||
+    findAiModel(guild.model) ||
+    findAiModel(defaultModelId()) ||
+    AI_MODELS[0];
+  return chosen;
+}
+
 
 export async function saveUserAiPrefs(client, guildId, userId, partial) {
   const cur = await getUserAiPrefs(client, guildId, userId);
@@ -320,12 +420,15 @@ export async function generateDmReply(client, userId, userMessage) {
       `\n\nThe DM user id is ${userId}. To mention them write exactly <@${userId}>. Never output USER_ID.`,
   );
 
+  const chosen = await resolveUserModel(client, guildId, userId);
   let answer = await generateReply({
     systemInstructions,
     userMessage: userMsg,
-    model: config.model,
+    model: chosen.model,
+    modelId: chosen.id,
+    provider: chosen.provider,
     history,
-    imageUrls,
+    imageUrls: chosen.vision ? imageUrls : [],
   });
 
   const maxLen = config.maxReplyLength || 1800;
@@ -370,7 +473,9 @@ async function generateOpenAICompatible({
   imageUrls,
   apiKey,
   baseUrl,
-  label }) {
+  label,
+  extraHeaders = {},
+}) {
   if (!apiKey) throw new Error(`${label} API key is not set`);
 
   const messages = [
@@ -384,6 +489,7 @@ async function generateOpenAICompatible({
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      ...extraHeaders,
     },
     body: JSON.stringify({
       model: model || defaultModel(),
@@ -422,13 +528,48 @@ async function generateOpenAICompatible({
 }
 
 export async function generateReply(opts) {
-  const p = provider();
   const imageUrls = opts.imageUrls || [];
+  // opts.modelId or opts.model → catalog entry; falls back to env provider
+  const catalog =
+    findAiModel(opts.modelId) ||
+    findAiModel(opts.model) ||
+    null;
+  const p = (opts.provider || catalog?.provider || provider()).toLowerCase();
+  const modelName = catalog?.model || opts.model || defaultModel();
+
+  if (p === 'pawan' || p === 'cosmosrp') {
+    return generateOpenAICompatible({
+      ...opts,
+      model: modelName || 'cosmosrp',
+      imageUrls: catalog?.vision === false ? [] : imageUrls,
+      apiKey: process.env.PAWAN_API_KEY || process.env.COSMOSRP_API_KEY || 'pk-no-key',
+      baseUrl: process.env.PAWAN_BASE_URL || 'https://api.pawan.krd/cosmosrp/v1',
+      label: 'CosmosRP',
+    });
+  }
+
+  if (p === 'openrouter') {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error('OPENROUTER_API_KEY is not set (needed for OpenRouter models)');
+    return generateOpenAICompatible({
+      ...opts,
+      model: modelName,
+      imageUrls: catalog?.vision === false ? [] : imageUrls,
+      apiKey: key,
+      baseUrl: 'https://openrouter.ai/api/v1',
+      label: 'OpenRouter',
+      extraHeaders: {
+        'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://yuris-chamber.local',
+        'X-Title': process.env.OPENROUTER_SITE_NAME || "Yuri's Chamber",
+      },
+    });
+  }
 
   if (p === 'naga') {
     return generateOpenAICompatible({
       ...opts,
-      imageUrls,
+      model: modelName,
+      imageUrls: catalog?.vision === false ? [] : imageUrls,
       apiKey: process.env.NAGA_API_KEY || process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.naga.ac/v1',
       label: 'Naga',
@@ -438,6 +579,7 @@ export async function generateReply(opts) {
   if (p === 'openai') {
     return generateOpenAICompatible({
       ...opts,
+      model: modelName,
       imageUrls,
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.openai.com/v1',
@@ -445,36 +587,39 @@ export async function generateReply(opts) {
     });
   }
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY is not set');
-  const model = opts.model || 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-  const userParts = [{ text: opts.userMessage }];
-  // Gemini inline image via URL not always supported; include URL in text
-  if (imageUrls.length) {
-    userParts[0].text +=
-      '\n\n' +
-      imageUrls.map((u) => `Image URL: ${u}`).join('\n') +
-      '\nDescribe / react to the image if you can.';
+  if (p === 'gemini') {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) throw new Error('GEMINI_API_KEY is not set');
+    const model = modelName || 'gemini-2.0-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const userParts = [{ text: opts.userMessage }];
+    if (imageUrls.length) {
+      userParts[0].text +=
+        '\n\n' +
+        imageUrls.map((u) => `Image URL: ${u}`).join('\n') +
+        '\nDescribe / react to the image if you can.';
+    }
+    const body = {
+      system_instruction: { parts: [{ text: opts.systemInstructions }] },
+      contents: [...(opts.history || []), { role: 'user', parts: userParts }],
+      generationConfig: { maxOutputTokens: 512, temperature: 0.7 },
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const errText = await res.text();
+    if (!res.ok) {
+      logger.error('Gemini error:', errText);
+      throw new Error(`Gemini failed (${res.status})`);
+    }
+    const json = JSON.parse(errText);
+    return (
+      json?.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ||
+      'No response'
+    ).trim();
   }
-  const body = {
-    system_instruction: { parts: [{ text: opts.systemInstructions }] },
-    contents: [...(opts.history || []), { role: 'user', parts: userParts }],
-    generationConfig: { maxOutputTokens: 512, temperature: 0.7 },
-  };
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const errText = await res.text();
-  if (!res.ok) {
-    logger.error('Gemini error:', errText);
-    throw new Error(`Gemini failed (${res.status})`);
-  }
-  const json = JSON.parse(errText);
-  return (
-    json?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ||
-    'No response'
-  ).trim();
+
+  throw new Error(`Unknown AI provider: ${p}`);
 }

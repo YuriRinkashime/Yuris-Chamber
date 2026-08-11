@@ -7,6 +7,7 @@ import {
   clearUserAiHistory,
   saveUserAiPrefs,
   buildSystemInstructions,
+  resolveUserModel,
 } from '../../services/aiService.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 
@@ -162,12 +163,15 @@ export default {
       if (mediaNote) {
         finalMsg = userMessage + '\n\n' + mediaNote + '\n(React to the photo/GIF — describe what you see when relevant.)';
       }
+      const chosen = await resolveUserModel(client, guildId, userId);
       let answer = await generateReply({
         systemInstructions,
         userMessage: finalMsg,
-        model: config.model,
+        model: chosen.model,
+        modelId: chosen.id,
+        provider: chosen.provider,
         history,
-        imageUrls,
+        imageUrls: chosen.vision ? imageUrls : [],
       });
 
       answer = fixMentions(answer, userId);

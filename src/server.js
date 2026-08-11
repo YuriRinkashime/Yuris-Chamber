@@ -804,80 +804,73 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
 
 
 app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
-  const guildId = getSessionGuildId(req);
-  if (!discordClient?.db || !guildId) {
-    return res.send(layout('AI', '<p class="err">DB or guild missing.</p>', 'ai'));
-  }
+  const guildId = getSessionGuildId(req) || DEFAULT_GUILD_ID;
+  const { getAiConfig, listAiModels } = await import('./services/aiService.js');
   const config = await getAiConfig(discordClient, guildId);
+  const models = listAiModels();
+  const options = models
+    .map(
+      (m) =>
+        `<option value="${escapeHtml(m.id)}" ${
+          config.modelId === m.id ? 'selected' : ''
+        }>${escapeHtml(m.label)}${m.vision ? ' · Vision' : ''}${m.free ? ' · Free' : ''}</option>`,
+    )
+    .join('');
   const saved = req.query.saved ? '<p class="ok">Saved.</p>' : '';
+  const err = req.query.err ? '<p class="err">Save failed.</p>' : '';
   res.send(
     layout(
       'AI',
-      `<h1>AI settings</h1>${saved}
-      <div class="banner"><div class="cap">Mind of Yuri<small>Persona · model · chamber brain</small></div></div>
+      `<h1>AI</h1>
+      <div class="banner"><div class="cap">Mind of Yuri<small>Persona · default model · chamber brain</small></div></div>
+      ${saved}${err}
       <div class="card">
-        <h2>Persona core</h2>
-        <p>Shapes every /prompt and DM reply. Max 12,000 characters. Saving stays on this page.</p>
         <form id="ai-form" method="POST" action="${path('/dashboard/ai')}">
-          <div class="toggle-row">
+          <label class="row" style="gap:10px;align-items:center">
             <input type="checkbox" name="enabled" value="1" ${config.enabled ? 'checked' : ''}/>
-            <span style="font-size:13px">AI enabled</span>
-          </div>
-          <label>Custom instructions</label>
-          <textarea name="systemInstructions" maxlength="12000" placeholder="Paste your full Yuri persona here…">${escapeHtml(config.systemInstructions)}</textarea>
-          <label>Model</label>
-          <input type="text" name="model" value="${escapeHtml(config.model)}"/>
-          <div class="row">
-            <button class="btn" type="submit" id="ai-save">Save</button>
-            <span id="ai-status" class="meta" style="font-size:12px;color:var(--muted)"></span>
-          </div>
+            <span>AI enabled</span>
+          </label>
+          <label style="margin-top:12px">Default model (server)</label>
+          <select name="modelId" style="width:100%;padding:10px;border-radius:8px;background:rgba(0,0,0,.35);color:var(--text);border:1px solid var(--line)">
+            ${options}
+          </select>
+          <p class="muted">Members use this unless they set <code>/aimodel</code>. Same chat history for every model.</p>
+          <label style="margin-top:12px">Custom model string (advanced)</label>
+          <input type="text" name="model" value="${escapeHtml(config.model || '')}" placeholder="Optional raw model id"/>
+          <label style="margin-top:12px">System instructions</label>
+          <textarea name="systemInstructions" rows="12">${escapeHtml(config.systemInstructions || '')}</textarea>
+          <label style="margin-top:12px">Max reply length</label>
+          <input type="number" name="maxReplyLength" value="${escapeHtml(String(config.maxReplyLength || 1800))}" min="200" max="4000"/>
+          <button class="btn" type="submit" style="margin-top:14px">Save</button>
         </form>
       </div>
-      <script>
-      (function(){
-        var form = document.getElementById('ai-form');
-        if(!form) return;
-        form.addEventListener('submit', function(e){
-          e.preventDefault();
-          var btn = document.getElementById('ai-save');
-          var st = document.getElementById('ai-status');
-          btn.disabled = true; st.textContent = 'Saving…';
-          var body = new URLSearchParams(new FormData(form));
-          fetch(form.action, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString()
-          }).then(function(r){ return r.json().catch(function(){ return { ok: r.ok }; }); })
-            .then(function(d){
-              st.textContent = d.ok !== false ? 'Saved ✓' : (d.error || 'Failed');
-              st.style.color = d.ok !== false ? 'var(--val2)' : 'var(--val)';
-            })
-            .catch(function(){ st.textContent = 'Network error'; st.style.color = 'var(--val)'; })
-            .finally(function(){ btn.disabled = false; });
-        });
-      })();
-      </script>`,
+      <div class="card" style="margin-top:14px">
+        <h2>Env keys</h2>
+        <p class="muted">CosmosRP: optional <code>PAWAN_API_KEY</code><br/>
+        OpenRouter Gemma: <code>OPENROUTER_API_KEY</code><br/>
+        Naga: <code>NAGA_API_KEY</code> · OpenAI: <code>OPENAI_API_KEY</code> · Gemini: <code>GEMINI_API_KEY</code></p>
+      </div>`,
       'ai',
     ),
   );
 });
 
 app.post(path('/dashboard/ai'), requireAuth, async (req, res) => {
-  const guildId = getSessionGuildId(req);
   try {
+    const guildId = getSessionGuildId(req) || DEFAULT_GUILD_ID;
+    const { saveAiConfig, findAiModel } = await import('./services/aiService.js');
+    const modelId = String(req.body.modelId || '').slice(0, 80);
+    const catalog = findAiModel(modelId);
     await saveAiConfig(discordClient, guildId, {
-      enabled: req.body.enabled === '1',
-      systemInstructions: String(req.body.systemInstructions || '').slice(0, 12000),
-      model: String(req.body.model || 'llama-3.3-70b-instruct:free').slice(0, 120),
+      enabled: req.body.enabled === '1' || req.body.enabled === 'on',
+      modelId: catalog?.id || modelId || undefined,
+      model: String(req.body.model || catalog?.model || '').slice(0, 120) || catalog?.model,
+      systemInstructions: String(req.body.systemInstructions || '').slice(0, 8000),
+      maxReplyLength: Math.min(4000, Math.max(200, parseInt(req.body.maxReplyLength, 10) || 1800)),
     });
-    const wantsJson = (req.headers.accept || '').includes('application/json');
-    if (wantsJson) return res.json({ ok: true, message: 'Saved' });
     res.redirect(path('/dashboard/ai') + '?saved=1');
   } catch (e) {
-    if ((req.headers.accept || '').includes('application/json')) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
+    console.error('ai save', e);
     res.redirect(path('/dashboard/ai') + '?err=1');
   }
 });
