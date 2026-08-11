@@ -47,6 +47,18 @@ export default {
         .setDescription('Any extra required role')
         .setRequired(false),
     )
+    .addRoleOption((o) =>
+      o
+        .setName('mention_role')
+        .setDescription('Ping a role when the giveaway is posted')
+        .setRequired(false),
+    )
+    .addUserOption((o) =>
+      o
+        .setName('mention_user')
+        .setDescription('Ping a user when the giveaway is posted')
+        .setRequired(false),
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   category: 'fun',
@@ -57,6 +69,8 @@ export default {
     const ageRole = interaction.options.getRole('min_age_range');
     const rankRole = interaction.options.getRole('min_rank');
     const extraRole = interaction.options.getRole('required_role');
+    const mentionRole = interaction.options.getRole('mention_role');
+    const mentionUser = interaction.options.getUser('mention_user');
 
     const meta = [
       channel.id,
@@ -64,6 +78,8 @@ export default {
       ageRole?.id || '',
       rankRole?.id || '',
       extraRole?.id || '',
+      mentionRole?.id || '',
+      mentionUser?.id || '',
     ].join('|');
 
     const modal = new ModalBuilder()

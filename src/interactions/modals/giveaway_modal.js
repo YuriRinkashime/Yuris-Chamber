@@ -17,6 +17,8 @@ export default {
     const ageRoleId = meta[2] || null;
     const rankRoleId = meta[3] || null;
     const extraRoleId = meta[4] || null;
+    const mentionRoleId = meta[5] || null;
+    const mentionUserId = meta[6] || null;
 
     const prize = interaction.fields.getTextInputValue('prize').trim();
     const durationRaw = interaction.fields.getTextInputValue('duration').trim();
@@ -75,7 +77,18 @@ export default {
     );
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const msg = await channel.send({ embeds: [embed], components: [row] });
+    const pingParts = [];
+    if (mentionRoleId) pingParts.push(`<@&${mentionRoleId}>`);
+    if (mentionUserId) pingParts.push(`<@${mentionUserId}>`);
+    const msg = await channel.send({
+      content: pingParts.length ? pingParts.join(' ') : undefined,
+      embeds: [embed],
+      components: [row],
+      allowedMentions: {
+        roles: mentionRoleId ? [mentionRoleId] : [],
+        users: mentionUserId ? [mentionUserId] : [],
+      },
+    });
 
     const record = {
       id: giveawayId,

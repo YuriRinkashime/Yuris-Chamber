@@ -7,6 +7,7 @@ import {
 const DEFAULT_RANKS = [
   'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum',
   'Diamond', 'Ascendant', 'Immortal', 'Radiant',
+  'Unranked', "Doesn't Play Valo",
 ];
 
 export default {

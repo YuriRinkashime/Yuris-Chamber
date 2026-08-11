@@ -12,6 +12,7 @@ const GENDER_ROLES = ['Male', 'Female', 'Non-binary / Other'];
 const RANK_ROLES = [
   'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum',
   'Diamond', 'Ascendant', 'Immortal', 'Radiant',
+  'Unranked', "Doesn't Play Valo",
 ];
 
 function keyOf(i) {
@@ -33,7 +34,7 @@ function summary(s) {
   return [
     s.age ? `**Age:** ${s.age}` : '**Age:** —',
     s.gender ? `**Gender:** ${s.gender}` : '**Gender:** —',
-    s.rank ? `**Rank:** ${s.rank}` : '**Rank:** —',
+    s.rank ? `**Rank / status:** ${s.rank}` : '**Rank / status:** —',
   ].join('\n');
 }
 
@@ -86,7 +87,7 @@ function rankRow() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('verify_rank')
-      .setPlaceholder('Select your Valorant rank...')
+      .setPlaceholder('Rank or activity (Valo / other)...')
       .addOptions(
         { label: 'Iron', value: 'rank_iron', emoji: '⚫' },
         { label: 'Bronze', value: 'rank_bronze', emoji: '🟤' },
@@ -97,6 +98,13 @@ function rankRow() {
         { label: 'Ascendant', value: 'rank_ascendant', emoji: '🟢' },
         { label: 'Immortal', value: 'rank_immortal', emoji: '🔴' },
         { label: 'Radiant', value: 'rank_radiant', emoji: '✨' },
+        { label: 'Unranked', value: 'rank_unranked', emoji: '❔' },
+        {
+          label: "Doesn't Play Valo",
+          value: 'rank_no_valo',
+          emoji: '🎮',
+          description: 'Here for other games / hangout',
+        },
       ),
   );
 }
@@ -196,7 +204,7 @@ export default [
         }
 
         await interaction.update({
-          content: `${summary(state)}\n\n**Step 3/3 — Choose your Valorant Rank**`,
+          content: `${summary(state)}\n\n**Step 3/3 — Rank / activity** (Valorant, Unranked, or Doesn't Play Valo)`,
           components: [rankRow(), backButton('verify_back_gender')] });
       } catch (err) {
         await safeError(interaction, err.message || 'Something went wrong.');

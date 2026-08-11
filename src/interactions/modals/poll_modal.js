@@ -11,7 +11,8 @@ import { parseFlexibleDurationSeconds } from '../../utils/duration.js';
 export default {
   name: 'poll_modal',
   async execute(interaction) {
-    const channelId = interaction.customId.split(':')[1];
+    const meta = interaction.customId.split(':').slice(1).join(':');
+    const [channelId, mentionRoleId = '', mentionUserId = ''] = meta.split('|');
     const question = interaction.fields.getTextInputValue('question').trim();
     const rawOptions = interaction.fields.getTextInputValue('options');
     const durationRaw = interaction.fields.getTextInputValue('duration').trim();
@@ -84,9 +85,19 @@ export default {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
+      const pingParts = [];
+      if (mentionRoleId) pingParts.push(`<@&${mentionRoleId}>`);
+      if (mentionUserId) pingParts.push(`<@${mentionUserId}>`);
+      const pingContent = pingParts.length ? pingParts.join(' ') : undefined;
+
       const msg = await channel.send({
+        content: pingContent,
         embeds: [buildPollEmbed(poll)],
         components: buildPollButtons(poll),
+        allowedMentions: {
+          roles: mentionRoleId ? [mentionRoleId] : [],
+          users: mentionUserId ? [mentionUserId] : [],
+        },
       });
       poll.messageId = msg.id;
       await savePoll(interaction.client, poll);

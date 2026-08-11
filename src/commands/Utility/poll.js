@@ -18,6 +18,18 @@ export default {
         .setDescription('Where to post the poll (default: this channel)')
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
     )
+    .addRoleOption((o) =>
+      o
+        .setName('mention_role')
+        .setDescription('Ping a role when the poll is posted')
+        .setRequired(false),
+    )
+    .addUserOption((o) =>
+      o
+        .setName('mention_user')
+        .setDescription('Ping a user when the poll is posted')
+        .setRequired(false),
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   category: 'utility',
@@ -25,9 +37,12 @@ export default {
   async execute(interaction) {
     const channel =
       interaction.options.getChannel('channel') || interaction.channel;
+    const mentionRole = interaction.options.getRole('mention_role');
+    const mentionUser = interaction.options.getUser('mention_user');
+    const meta = [channel.id, mentionRole?.id || '', mentionUser?.id || ''].join('|');
 
     const modal = new ModalBuilder()
-      .setCustomId(`poll_modal:${channel.id}`)
+      .setCustomId(`poll_modal:${meta}`)
       .setTitle('Create poll');
 
     const question = new TextInputBuilder()
