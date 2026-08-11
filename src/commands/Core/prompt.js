@@ -8,6 +8,7 @@ import {
   saveUserAiPrefs,
   buildSystemInstructions,
   resolveUserModel,
+  formatAiUserError,
 } from '../../services/aiService.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 
@@ -199,8 +200,9 @@ export default {
         },
       });
     } catch (error) {
+      const { formatAiUserError: fmt } = await import('../../services/aiService.js');
       return InteractionHelper.safeEditReply(interaction, {
-        content: `AI error: ${error.message}`,
+        content: fmt(error),
       });
     }
   },

@@ -342,7 +342,17 @@ export default {
           }
         }
       } catch (err) {
-        logger.debug('AI chat trigger failed:', err?.message);
+        logger.warn('AI chat trigger failed:', err?.message);
+        try {
+          const { formatAiUserError } = await import('../services/aiService.js');
+          await message
+            .reply({ content: formatAiUserError(err) })
+            .catch(() =>
+              message.channel
+                .send({ content: formatAiUserError(err) })
+                .catch(() => {}),
+            );
+        } catch (_) {}
       }
 
       // Channel locks (stored in Firebase via client.db)

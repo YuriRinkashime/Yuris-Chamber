@@ -497,9 +497,16 @@ async function generateOpenAICompatible({
         label,
       });
     }
-    if (res.status === 429) throw new Error(`${label} rate-limited. Wait a bit.`);
-    if (res.status === 401) throw new Error(`${label} key invalid.`);
-    throw new Error(`${label} request failed (${res.status})`);
+    if (res.status === 429) throw new Error(`${label} is rate-limited. Wait a bit, then try again.`);
+    if (res.status === 401 || res.status === 403)
+      throw new Error(
+        `${label} API key is missing/invalid. Check Env keys, or use /aimodel to switch model.`,
+      );
+    if (res.status === 404)
+      throw new Error(
+        `${label} endpoint/model not found (404). Fix PAWAN_BASE_URL / model, or /aimodel to switch.`,
+      );
+    throw new Error(`${label} request failed (${res.status}). Try /aimodel to change model.`);
   }
 
   const json = JSON.parse(raw);
@@ -519,12 +526,19 @@ export async function generateReply(opts) {
   const modelName = catalog?.model || opts.model || defaultModel();
 
   if (p === 'pawan' || p === 'cosmosrp') {
+    const key = process.env.PAWAN_API_KEY || process.env.COSMOSRP_API_KEY || '';
+    if (!key) {
+      throw new Error(
+        'CosmosRP needs PAWAN_API_KEY. Get it from Pawan Discord (/key), add it in Bot-Hosting Env, then restart. Or /aimodel to Gemma/Llama.',
+      );
+    }
+    // Official OpenAI-compatible endpoint for CosmosRP
     return generateOpenAICompatible({
       ...opts,
-      model: modelName || 'cosmosrp',
+      model: modelName === 'cosmosrp' || !modelName ? 'cosmosrp' : modelName,
       imageUrls: catalog?.vision === false ? [] : imageUrls,
-      apiKey: process.env.PAWAN_API_KEY || process.env.COSMOSRP_API_KEY || 'pk-no-key',
-      baseUrl: process.env.PAWAN_BASE_URL || 'https://api.pawan.krd/cosmosrp/v1',
+      apiKey: key,
+      baseUrl: (process.env.PAWAN_BASE_URL || 'https://api.pawan.krd/cosmosrp/v1').replace(/\/+$/, ''),
       label: 'CosmosRP',
     });
   }
@@ -603,4 +617,33 @@ export async function generateReply(opts) {
   }
 
   throw new Error(`Unknown AI provider: ${p}`);
+}
+
+
+/** User-facing AI failure text (Discord) */
+export function formatAiUserError(err) {
+  const raw = String(err?.message || err || 'unknown error');
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('failed') ||
+    lower.includes('404') ||
+    lower.includes('401') ||
+    lower.includes('403') ||
+    lower.includes('429') ||
+    lower.includes('rate') ||
+    lower.includes('key') ||
+    lower.includes('empty response') ||
+    lower.includes('not set') ||
+    lower.includes('disabled')
+  ) {
+    return (
+      `⚠️ **Model failed to reply.**\n` +
+      `${raw.slice(0, 180)}\n\n` +
+      `Try **\`/aimodel\`** and switch to another model (Gemma / Llama / CosmosRP), then try again.`
+    );
+  }
+  return (
+    `⚠️ **Model failed to reply.** Try **\`/aimodel\`** to change model.\n` +
+    `_(${raw.slice(0, 120)})_`
+  );
 }
