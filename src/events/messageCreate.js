@@ -172,6 +172,8 @@ export default {
             buildSystemInstructions,
             saveUserAiPrefs,
             formatMediaContext,
+            resolveUserModel,
+            formatAiUserError,
           } = await import('../services/aiService.js');
 
           const guildId = message.guild.id;

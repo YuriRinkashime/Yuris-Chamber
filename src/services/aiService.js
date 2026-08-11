@@ -11,10 +11,11 @@ export const AI_MODELS = [
     id: 'cosmosrp-2.1',
     label: 'CosmosRP V2.1 (Vision · Roleplay)',
     provider: 'pawan',
-    model: 'cosmosrp',
+    model: 'pkrd/cosmosrp-2.1',  // official model id from pawan.krd
+    baseUrl: 'https://api.pawan.krd/v1',
     vision: true,
     free: true,
-    note: 'Pawan.Krd — vision + RP optimized',
+    note: 'Pawan.Krd — https://api.pawan.krd/v1 + key from pawan.krd/keys',
   },
   {
     id: 'gemma-4-26b-free',
@@ -529,16 +530,20 @@ export async function generateReply(opts) {
     const key = process.env.PAWAN_API_KEY || process.env.COSMOSRP_API_KEY || '';
     if (!key) {
       throw new Error(
-        'CosmosRP needs PAWAN_API_KEY. Get it from Pawan Discord (/key), add it in Bot-Hosting Env, then restart. Or /aimodel to Gemma/Llama.',
+        'CosmosRP needs PAWAN_API_KEY from https://pawan.krd/keys (or Discord /key). Add it in Env, restart, or /aimodel to Gemma/Llama.',
       );
     }
-    // Official OpenAI-compatible endpoint for CosmosRP
+    // Official docs: BASE https://api.pawan.krd/v1  MODEL pkrd/cosmosrp-2.1
+    const base =
+      process.env.PAWAN_BASE_URL ||
+      catalog?.baseUrl ||
+      'https://api.pawan.krd/v1';
     return generateOpenAICompatible({
       ...opts,
-      model: modelName === 'cosmosrp' || !modelName ? 'cosmosrp' : modelName,
+      model: modelName || 'pkrd/cosmosrp-2.1',
       imageUrls: catalog?.vision === false ? [] : imageUrls,
       apiKey: key,
-      baseUrl: (process.env.PAWAN_BASE_URL || 'https://api.pawan.krd/cosmosrp/v1').replace(/\/+$/, ''),
+      baseUrl: String(base).replace(/\/+$/, ''),
       label: 'CosmosRP',
     });
   }
