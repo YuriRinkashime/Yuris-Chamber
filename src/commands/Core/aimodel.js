@@ -23,6 +23,7 @@ export default {
         .addChoices(
           { name: 'CosmosRP V2.1 (Vision · RP)', value: 'cosmosrp-2.1' },
           { name: 'Gemma 4 26B Free (OpenRouter)', value: 'gemma-4-26b-free' },
+          { name: 'Llama 3.3 70B (Naga free)', value: 'naga-llama-free' },
           { name: 'Server default (reset)', value: 'default' },
         ),
     ),
@@ -48,10 +49,7 @@ export default {
       }
       const m = findAiModel(pick);
       if (!m) {
-        return interaction.reply({
-          content: 'Unknown model.',
-          flags: MessageFlags.Ephemeral,
-        });
+        return interaction.reply({ content: 'Unknown model.', flags: MessageFlags.Ephemeral });
       }
       await saveUserAiPrefs(client, guildId, userId, { modelId: m.id });
       return interaction.reply({

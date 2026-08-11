@@ -25,6 +25,15 @@ export const AI_MODELS = [
     free: true,
     note: 'OpenRouter free tier — multimodal',
   },
+  {
+    id: 'naga-llama-free',
+    label: 'Llama 3.3 70B (Naga free)',
+    provider: 'naga',
+    model: 'llama-3.3-70b-instruct:free',
+    vision: false,
+    free: true,
+    note: 'Naga — text only, solid general chat',
+  },
 ];
 
 export function listAiModels() {

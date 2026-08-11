@@ -813,7 +813,7 @@ app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
       (m) =>
         `<option value="${escapeHtml(m.id)}" ${
           config.modelId === m.id ? 'selected' : ''
-        }>${escapeHtml(m.label)}${m.vision ? ' · Vision' : ''}${m.free ? ' · Free' : ''}</option>`,
+        }>${escapeHtml(m.label)}${m.vision ? ' · Vision' : ' · Text'}${m.free ? ' · Free' : ''}</option>`,
     )
     .join('');
   const saved = req.query.saved ? '<p class="ok">Saved.</p>' : '';
@@ -834,20 +834,23 @@ app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
           <select name="modelId" style="width:100%;padding:10px;border-radius:8px;background:rgba(0,0,0,.35);color:var(--text);border:1px solid var(--line)">
             ${options}
           </select>
-          <p class="muted">Members use this unless they set <code>/aimodel</code>. Same chat history for every model.</p>
-          <label style="margin-top:12px">Custom model string (advanced)</label>
-          <input type="text" name="model" value="${escapeHtml(config.model || '')}" placeholder="Optional raw model id"/>
+          <p class="muted">Everyone uses this unless they run <code>/aimodel</code>. Chat history is shared across models.</p>
           <label style="margin-top:12px">System instructions</label>
-          <textarea name="systemInstructions" rows="12">${escapeHtml(config.systemInstructions || '')}</textarea>
+          <textarea name="systemInstructions" rows="16">${escapeHtml(config.systemInstructions || '')}</textarea>
           <label style="margin-top:12px">Max reply length</label>
           <input type="number" name="maxReplyLength" value="${escapeHtml(String(config.maxReplyLength || 1800))}" min="200" max="4000"/>
           <button class="btn" type="submit" style="margin-top:14px">Save</button>
         </form>
       </div>
       <div class="card" style="margin-top:14px">
-        <h2>Env keys</h2>
-        <p class="muted"><strong>CosmosRP (Pawan):</strong> optional <code>PAWAN_API_KEY</code><br/>
-        <strong>Gemma (OpenRouter):</strong> <code>OPENROUTER_API_KEY</code> required</p>
+        <h2>Models in this bot</h2>
+        <ul class="muted" style="line-height:1.7;margin:8px 0 0 18px">
+          <li><strong>CosmosRP V2.1</strong> — vision + roleplay (Pawan). Best for pics/gifs + RP tone.</li>
+          <li><strong>Gemma 4 26B Free</strong> — OpenRouter multimodal. Needs <code>OPENROUTER_API_KEY</code>.</li>
+          <li><strong>Llama 3.3 70B</strong> — Naga free, text only. Needs <code>NAGA_API_KEY</code>.</li>
+        </ul>
+        <p class="muted" style="margin-top:12px"><strong>Discord:</strong> <code>/aimodel</code> switches per user (sticky). History stays the same.</p>
+        <p class="muted"><strong>@bot / reply</strong> and <code>/prompt</code> use the active model. Vision models get photo/GIF context.</p>
       </div>`,
       'ai',
     ),
@@ -863,8 +866,8 @@ app.post(path('/dashboard/ai'), requireAuth, async (req, res) => {
     await saveAiConfig(discordClient, guildId, {
       enabled: req.body.enabled === '1' || req.body.enabled === 'on',
       modelId: catalog?.id || modelId || undefined,
-      model: String(req.body.model || catalog?.model || '').slice(0, 120) || catalog?.model,
-      systemInstructions: String(req.body.systemInstructions || '').slice(0, 8000),
+      model: catalog?.model || modelId,
+      systemInstructions: String(req.body.systemInstructions || '').slice(0, 12000),
       maxReplyLength: Math.min(4000, Math.max(200, parseInt(req.body.maxReplyLength, 10) || 1800)),
     });
     res.redirect(path('/dashboard/ai') + '?saved=1');
