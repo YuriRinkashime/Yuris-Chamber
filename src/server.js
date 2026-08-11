@@ -846,9 +846,8 @@ app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
       </div>
       <div class="card" style="margin-top:14px">
         <h2>Env keys</h2>
-        <p class="muted">CosmosRP: optional <code>PAWAN_API_KEY</code><br/>
-        OpenRouter Gemma: <code>OPENROUTER_API_KEY</code><br/>
-        Naga: <code>NAGA_API_KEY</code> · OpenAI: <code>OPENAI_API_KEY</code> · Gemini: <code>GEMINI_API_KEY</code></p>
+        <p class="muted"><strong>CosmosRP (Pawan):</strong> optional <code>PAWAN_API_KEY</code><br/>
+        <strong>Gemma (OpenRouter):</strong> <code>OPENROUTER_API_KEY</code> required</p>
       </div>`,
       'ai',
     ),

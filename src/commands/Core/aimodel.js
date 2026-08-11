@@ -23,9 +23,6 @@ export default {
         .addChoices(
           { name: 'CosmosRP V2.1 (Vision · RP)', value: 'cosmosrp-2.1' },
           { name: 'Gemma 4 26B Free (OpenRouter)', value: 'gemma-4-26b-free' },
-          { name: 'Llama 3.3 70B (Naga free)', value: 'naga-llama-free' },
-          { name: 'GPT-4o mini (OpenAI)', value: 'openai-gpt-4o-mini' },
-          { name: 'Gemini 2.0 Flash', value: 'gemini-flash' },
           { name: 'Server default (reset)', value: 'default' },
         ),
     ),

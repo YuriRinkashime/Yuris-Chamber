@@ -25,33 +25,6 @@ export const AI_MODELS = [
     free: true,
     note: 'OpenRouter free tier — multimodal',
   },
-  {
-    id: 'naga-llama-free',
-    label: 'Llama 3.3 70B (Naga free)',
-    provider: 'naga',
-    model: 'llama-3.3-70b-instruct:free',
-    vision: false,
-    free: true,
-    note: 'Text only',
-  },
-  {
-    id: 'openai-gpt-4o-mini',
-    label: 'GPT-4o mini (OpenAI)',
-    provider: 'openai',
-    model: 'gpt-4o-mini',
-    vision: true,
-    free: false,
-    note: 'Requires OPENAI_API_KEY',
-  },
-  {
-    id: 'gemini-flash',
-    label: 'Gemini 2.0 Flash',
-    provider: 'gemini',
-    model: 'gemini-2.0-flash',
-    vision: true,
-    free: false,
-    note: 'Requires GEMINI_API_KEY',
-  },
 ];
 
 export function listAiModels() {
@@ -79,7 +52,6 @@ export function findAiModel(idOrName) {
 function defaultModelId() {
   const fromEnv = process.env.AI_DEFAULT_MODEL_ID;
   if (fromEnv && findAiModel(fromEnv)) return fromEnv;
-  // Prefer vision-capable free models
   return 'cosmosrp-2.1';
 }
 
