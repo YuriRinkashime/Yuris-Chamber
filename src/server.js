@@ -690,6 +690,96 @@ body.nav-open .nav-backdrop{display:block}
   .top-actions{display:flex;align-items:center;gap:8px}
 }
 
+
+/* —— Centered top bar + polished mobile menu —— */
+.top{
+  display:grid !important;
+  grid-template-columns:1fr auto 1fr !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:12px !important;
+  flex-wrap:nowrap !important;
+  padding:10px 20px !important;
+  max-width:100%;
+}
+.top-brand, .brand-wrap{justify-self:start;display:flex;align-items:center;gap:10px}
+.top .nav, #mainNav{
+  justify-self:center !important;
+  display:flex !important;
+  flex-wrap:wrap;
+  justify-content:center;
+  max-width:min(900px,70vw);
+}
+.top-actions{
+  justify-self:end !important;
+  display:flex;align-items:center;gap:8px;
+}
+/* Soft background */
+body{
+  background:
+    radial-gradient(ellipse 100% 60% at 50% -20%, rgba(255,70,85,.11), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 0% 80%, rgba(255,70,85,.05), transparent 50%),
+    #0a0c10 !important;
+}
+body::before{
+  opacity:.18 !important;
+  background-image:
+    linear-gradient(rgba(255,70,85,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,70,85,.03) 1px, transparent 1px) !important;
+  background-size:64px 64px !important;
+  mask-image:radial-gradient(ellipse at 50% 30%, #000 0%, transparent 70%) !important;
+}
+/* Hamburger icon */
+.nav-toggle{
+  width:44px;height:44px;padding:0;border:1px solid rgba(255,70,85,.45);
+  background:rgba(255,70,85,.1);display:none;align-items:center;justify-content:center;cursor:pointer;
+  clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.nav-toggle .bars{display:flex;flex-direction:column;gap:5px;width:18px}
+.nav-toggle .bars i{display:block;height:2px;width:100%;background:#fff;border-radius:1px;transition:transform .2s,opacity .2s}
+body.nav-open .nav-toggle .bars i:nth-child(1){transform:translateY(7px) rotate(45deg)}
+body.nav-open .nav-toggle .bars i:nth-child(2){opacity:0}
+body.nav-open .nav-toggle .bars i:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.nav-backdrop{background:rgba(0,0,0,.6)!important;backdrop-filter:blur(2px)}
+@media (max-width:720px){
+  .top{
+    grid-template-columns:1fr auto auto !important;
+    padding:8px 12px !important;
+  }
+  .top-actions{gap:6px}
+  .nav-toggle{display:inline-flex !important}
+  .top .nav, #mainNav{
+    display:none !important;
+    position:fixed !important;
+    top:58px !important;
+    left:50% !important;
+    right:auto !important;
+    transform:translateX(-50%) !important;
+    width:min(360px, calc(100vw - 24px)) !important;
+    max-width:360px !important;
+    z-index:160 !important;
+    flex-direction:column !important;
+    justify-content:flex-start !important;
+    background:rgba(12,14,18,.98) !important;
+    border:1px solid rgba(255,70,85,.4) !important;
+    padding:8px !important;
+    max-height:min(70vh, 480px) !important;
+    overflow:auto !important;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);
+  }
+  body.nav-open .top .nav, body.nav-open #mainNav{display:flex !important}
+  body.nav-open .top .nav .nav-link, body.nav-open #mainNav .nav-link{
+    width:100% !important;
+    justify-content:flex-start !important;
+    padding:12px 14px !important;
+    font-size:13px !important;
+  }
+  .shell{padding-top:70px !important}
+}
+@media (min-width:721px){
+  .nav-toggle{display:none !important}
+}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -708,7 +798,7 @@ ${
           </div>
           <div class="top-actions">
           <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu">
-            <div><span></span><span></span><span></span></div>
+            <div class="bars"><i></i><i></i><i></i></div>
           </button>
         </div>
         <nav class="nav" id="mainNav">${nav}</nav>
