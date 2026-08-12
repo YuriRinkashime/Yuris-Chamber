@@ -60,14 +60,42 @@ function path(p) {
 function signToken() {
   return crypto.randomBytes(24).toString('hex');
 }
-function createSession() {
+function createSession(extra = {}) {
   const token = signToken();
   sessions.set(token, {
     expiresAt: Date.now() + SESSION_TTL_MS,
-    guildId: DEFAULT_GUILD_ID || null,
+    guildId: extra.guildId || DEFAULT_GUILD_ID || null,
+    role: extra.role || 'owner', // 'owner' | 'guild_admin'
+    userId: extra.userId || null,
+    allowedGuilds: extra.allowedGuilds || null, // null = all (owner)
   });
   return token;
 }
+function getSession(req) {
+  const token = getCookie(req, 'yuri_dash');
+  if (!token || !isValidSession(token)) return null;
+  return sessions.get(token);
+}
+function isOwnerSession(req) {
+  const s = getSession(req);
+  return s?.role === 'owner';
+}
+function requireOwner(req, res, next) {
+  if (!isValidSession(getCookie(req, 'yuri_dash'))) {
+    return res.redirect(303, path('/login'));
+  }
+  if (!isOwnerSession(req)) {
+    return res.status(403).send(layout('Forbidden', '<p class="err">Owner only.</p>', ''));
+  }
+  next();
+}
+function ownerIdsList() {
+  return String(process.env.OWNER_IDS || process.env.OWNER_ID || '')
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function isValidSession(token) {
   if (!token) return false;
   const s = sessions.get(token);
@@ -107,8 +135,24 @@ function requireAuth(req, res, next) {
   if (!isValidSession(getCookie(req, 'yuri_dash'))) {
     return res.redirect(303, path('/login'));
   }
+  const s = getSession(req);
+  req.dashRole = s?.role || 'owner';
+  req.dashUserId = s?.userId || null;
+  req.dashAllowedGuilds = s?.allowedGuilds || null;
   next();
 }
+function layoutFor(req, title, body, active = '') {
+  return layout(title, body, active, { role: req?.dashRole || 'owner' });
+}
+
+function denyGuildAdmin(req, res) {
+  if (req.dashRole === 'guild_admin') {
+    res.status(403).send(layoutFor(req, 'Forbidden', '<div class="card"><p class="err">This section is for the bot owner only. You can manage commands & welcome for your server.</p></div>', 'dashboard'));
+    return true;
+  }
+  return false;
+}
+
 function getSessionGuildId(req) {
   const token = getCookie(req, 'yuri_dash');
   const s = sessions.get(token);
@@ -131,8 +175,9 @@ function guildSelectHtml(selected) {
     .join('');
 }
 
-function layout(title, body, active = '') {
-  const nav = [
+function layout(title, body, active = '', opts = {}) {
+  const role = opts.role || 'owner';
+  const allNav = [
     ['dashboard', 'Overview', '◆', path('/dashboard')],
     ['ai', 'AI', '✦', path('/dashboard/ai')],
     ['commands', 'Commands', '▣', path('/dashboard/commands')],
@@ -140,8 +185,14 @@ function layout(title, body, active = '') {
     ['polls', 'Polls', '📊', path('/dashboard/polls')],
     ['giveaways', 'Giveaways', '🎁', path('/dashboard/giveaways')],
     ['welcome', 'Welcome', '👋', path('/dashboard/welcome')],
+    ['messages', 'Messages', '✎', path('/dashboard/messages')],
     ['maintenance', 'Maintenance', '⚙', path('/dashboard/maintenance')],
-  ]
+  ];
+  const guildAdminAllowed = new Set(['dashboard', 'commands', 'welcome', 'polls', 'giveaways']);
+  const navItems = role === 'guild_admin'
+    ? allNav.filter((x) => guildAdminAllowed.has(x[0]))
+    : allNav;
+  const nav = navItems
     .map(
       ([id, label, icon, href]) =>
         `<a class="nav-link${active === id ? ' active' : ''}" href="${href}"><span class="nav-ico">${icon}</span>${label}</a>`,
@@ -505,6 +556,54 @@ body.is-login .top,body.is-login .hero{display:none !important}
   .vtoggle{flex:1;min-width:140px}
 }
 
+
+/* —— Global Valorant form controls —— */
+select, .vselect{
+  appearance:none;-webkit-appearance:none;
+  width:100%;max-width:100%;
+  background:#0e1218 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ff4655' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") right 12px center/12px no-repeat;
+  border:1px solid rgba(255,70,85,.45);
+  color:#f2f4f8;padding:11px 36px 11px 12px;border-radius:2px;
+  font-family:var(--display),Rajdhani,sans-serif;font-weight:600;letter-spacing:.04em;
+  clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+select:focus,.vselect:focus{outline:none;border-color:#ff4655;box-shadow:0 0 0 1px rgba(255,70,85,.35)}
+select:disabled{opacity:.45}
+textarea, input[type=text], input[type=password], input[type=number]{
+  background:#0e1218;border:1px solid rgba(255,70,85,.35);color:#f2f4f8;
+  padding:11px 12px;border-radius:2px;
+  clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  font-family:inherit;
+}
+textarea:focus,input[type=text]:focus,input[type=password]:focus,input[type=number]:focus{
+  outline:none;border-color:#ff4655;box-shadow:0 0 0 1px rgba(255,70,85,.3);
+}
+/* Valorant switch for native checkboxes */
+input[type=checkbox].vswitch,
+input[type=checkbox]:not(.plain){
+  appearance:none;-webkit-appearance:none;
+  width:46px;height:24px;border-radius:2px;position:relative;cursor:pointer;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+  vertical-align:middle;flex-shrink:0;
+  clip-path:polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+input[type=checkbox].vswitch:checked,
+input[type=checkbox]:not(.plain):checked{
+  background:#ff4655;border-color:#ff4655;box-shadow:0 0 12px rgba(255,70,85,.4);
+}
+input[type=checkbox].vswitch::after,
+input[type=checkbox]:not(.plain)::after{
+  content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;background:#c5c9d1;
+  clip-path:polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+  transition:left .15s ease;
+}
+input[type=checkbox].vswitch:checked::after,
+input[type=checkbox]:not(.plain):checked::after{
+  left:24px;background:#fff;
+}
+.role-pill{display:inline-block;padding:2px 8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  border:1px solid rgba(255,70,85,.4);color:#ff8a94;margin-left:8px}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -545,12 +644,12 @@ ${
 </html>`;
 }
 
-app.post(path('/dashboard/stop'), requireAuth, (req, res) => {
+app.post(path('/dashboard/stop'), requireOwner, (req, res) => {
   res.send(layout('Stopped', '<div class="card"><p class="err">Bot process stopping. Use your host panel to Start again if it does not auto-restart.</p></div>', 'dashboard'));
   setTimeout(() => { try { process.exit(1); } catch (_) {} }, 500);
 });
 
-app.post(path('/dashboard/restart'), requireAuth, (req, res) => {
+app.post(path('/dashboard/restart'), requireOwner, (req, res) => {
   res.send(layout(
     'Restart',
     `<div class="card">
@@ -670,19 +769,44 @@ app.get(path('/login'), (req, res) => {
   );
 });
 
-app.post(path('/login'), (req, res) => {
-  if (!DASHBOARD_USERNAME || !DASHBOARD_PASSWORD) {
-    return res.redirect(303, path('/login') + '?error=config');
-  }
+app.post(path('/login'), async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
-  const userOk = username === DASHBOARD_USERNAME;
-  const a = Buffer.from(password);
-  const b = Buffer.from(DASHBOARD_PASSWORD);
-  const passOk = a.length === b.length && crypto.timingSafeEqual(a, b);
-  if (!userOk || !passOk) return res.redirect(303, path('/login') + '?error=1');
-  setSessionCookie(res, createSession());
-  res.redirect(303, path('/dashboard'));
+
+  // Bot owner (env)
+  if (DASHBOARD_USERNAME && DASHBOARD_PASSWORD) {
+    const userOk = username === DASHBOARD_USERNAME;
+    const a = Buffer.from(password);
+    const b = Buffer.from(DASHBOARD_PASSWORD);
+    const passOk = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (userOk && passOk) {
+      const token = createSession({ role: 'owner', guildId: DEFAULT_GUILD_ID || null, allowedGuilds: null });
+      setSessionCookie(res, token);
+      return res.redirect(303, path('/dashboard'));
+    }
+  }
+
+  // Guild manager accounts (Mongo)
+  try {
+    const key = `dashboard:user:${username.toLowerCase()}`;
+    const acc = discordClient?.db ? await discordClient.db.get(key, null) : null;
+    if (acc?.passwordHash) {
+      const hash = crypto.createHash('sha256').update(password + ':' + username.toLowerCase()).digest('hex');
+      if (hash === acc.passwordHash && acc.role === 'guild_admin') {
+        const gids = Array.isArray(acc.guildIds) ? acc.guildIds : [];
+        const token = createSession({
+          role: 'guild_admin',
+          guildId: gids[0] || null,
+          allowedGuilds: gids,
+          userId: username.toLowerCase(),
+        });
+        setSessionCookie(res, token);
+        return res.redirect(303, path('/dashboard'));
+      }
+    }
+  } catch (_) {}
+
+  return res.redirect(303, path('/login') + '?error=1');
 });
 
 app.post(path('/logout'), requireAuth, (req, res) => {
@@ -696,8 +820,14 @@ app.post(path('/dashboard/guild'), requireAuth, (req, res) => {
   const token = getCookie(req, 'yuri_dash');
   const s = sessions.get(token);
   const gid = String(req.body.guildId || '');
-  if (s && discordClient?.guilds?.cache?.has(gid)) s.guildId = gid;
-  res.redirect(path('/dashboard/commands'));
+  if (s && discordClient?.guilds?.cache?.has(gid)) {
+    if (s.role === 'guild_admin' && Array.isArray(s.allowedGuilds) && !s.allowedGuilds.includes(gid)) {
+      return res.redirect(path('/dashboard'));
+    }
+    s.guildId = gid;
+  }
+  const back = String(req.body.back || '') || path('/dashboard/commands');
+  res.redirect(back.startsWith('/') ? back : path('/dashboard/commands'));
 });
 
 
@@ -870,6 +1000,7 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
 
 
 app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
+  if (denyGuildAdmin(req, res)) return;
   const guildId = getSessionGuildId(req) || DEFAULT_GUILD_ID;
   const { getAiConfig, listAiModels } = await import('./services/aiService.js');
   const config = await getAiConfig(discordClient, guildId);
@@ -923,7 +1054,7 @@ app.get(path('/dashboard/ai'), requireAuth, async (req, res) => {
   );
 });
 
-app.post(path('/dashboard/ai'), requireAuth, async (req, res) => {
+app.post(path('/dashboard/ai'), requireAuth, async (req, res, next) => { if (denyGuildAdmin(req, res)) return; return next(); }, async (req, res) => {
   try {
     const guildId = getSessionGuildId(req) || DEFAULT_GUILD_ID;
     const { saveAiConfig, findAiModel } = await import('./services/aiService.js');
@@ -944,6 +1075,7 @@ app.post(path('/dashboard/ai'), requireAuth, async (req, res) => {
 });
 
 app.get(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
+  if (denyGuildAdmin(req, res)) return;
   const guildId = getSessionGuildId(req);
   if (guildId && discordClient) await loadRuntimeSettings(discordClient, guildId);
   const on = isMaintenanceModeRuntime();
@@ -974,7 +1106,7 @@ app.get(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
   );
 });
 
-app.post(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
+app.post(path('/dashboard/maintenance'), requireOwner, async (req, res) => {
   await saveRuntimeSettings(discordClient, getSessionGuildId(req), {
     maintenanceMode: req.body.maintenanceMode === '1',
     maintenanceMessage: String(req.body.maintenanceMessage || '').slice(0, 500),
@@ -1578,6 +1710,7 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
 
 
 app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
+  if (denyGuildAdmin(req, res)) return;
   let threads = [];
   let listErr = '';
   try {
@@ -2279,6 +2412,148 @@ app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended:
   }
 });
 
+
+
+
+// ——— Message editor (bot-owned messages) ———
+app.get(path('/dashboard/messages'), requireAuth, async (req, res) => {
+  if (req.dashRole === 'guild_admin') {
+    return res.status(403).send(layoutFor(req, 'Forbidden', '<p class="err">Owner only.</p>', ''));
+  }
+  const flash = req.query.ok
+    ? `<p class="ok">${escapeHtml(String(req.query.ok))}</p>`
+    : req.query.err
+      ? `<p class="err">${escapeHtml(String(req.query.err))}</p>`
+      : '';
+  res.send(
+    layoutFor(
+      req,
+      'Edit messages',
+      `<h1 class="section-title">Edit bot messages</h1>
+      ${flash}
+      <div class="card">
+        <p class="muted">Paste a message link or channel ID + message ID. Only messages <strong>sent by this bot</strong> can be edited.</p>
+        <form method="post" action="${path('/dashboard/messages/edit')}">
+          <label>Message link (or leave blank and use IDs below)</label>
+          <input type="text" name="link" placeholder="https://discord.com/channels/guild/channel/message" style="width:100%;margin-bottom:10px"/>
+          <label>Channel ID</label>
+          <input type="text" name="channelId" style="width:100%;margin-bottom:10px"/>
+          <label>Message ID</label>
+          <input type="text" name="messageId" style="width:100%;margin-bottom:10px"/>
+          <label>New content (text only — embeds kept if present)</label>
+          <textarea name="content" rows="8" style="width:100%" required></textarea>
+          <div style="margin-top:12px"><button class="btn" type="submit">Edit message</button></div>
+        </form>
+      </div>`,
+      'messages',
+    ),
+  );
+});
+
+app.post(path('/dashboard/messages/edit'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    if (req.dashRole === 'guild_admin') {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Owner only'));
+    }
+    let channelId = String(req.body.channelId || '').trim();
+    let messageId = String(req.body.messageId || '').trim();
+    const link = String(req.body.link || '').trim();
+    const content = String(req.body.content || '').slice(0, 2000);
+    if (link) {
+      const m = link.match(/channels\/\d+\/(\d+)\/(\d+)/);
+      if (m) {
+        channelId = m[1];
+        messageId = m[2];
+      }
+    }
+    if (!channelId || !messageId || !content) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Missing channel/message/content'));
+    }
+    const ch = await discordClient.channels.fetch(channelId).catch(() => null);
+    if (!ch?.isTextBased?.()) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Invalid channel'));
+    }
+    const msg = await ch.messages.fetch(messageId).catch(() => null);
+    if (!msg) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Message not found'));
+    }
+    if (msg.author?.id !== discordClient.user?.id) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Not a message from this bot'));
+    }
+    await msg.edit({ content });
+    return res.redirect(path('/dashboard/messages') + '?ok=' + encodeURIComponent('Message updated'));
+  } catch (e) {
+    return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent(e.message || 'Edit failed'));
+  }
+});
+
+// ——— Server-owner registration (limited dashboard) ———
+app.get(path('/register'), async (req, res) => {
+  const token = String(req.query.token || '').trim();
+  if (!token || !discordClient?.db) {
+    return res.send(layout('Register', '<p class="err">Invalid invite.</p>', 'login'));
+  }
+  const inv = await discordClient.db.get(`dashboard:invite:${token}`, null);
+  if (!inv || inv.used) {
+    return res.send(layout('Register', '<p class="err">Invite expired or already used.</p>', 'login'));
+  }
+  res.send(
+    layout(
+      'Register',
+      `<div class="login-screen"><div class="login-card">
+        <div class="brand">Yuri's Chamber<span>Server manager signup</span></div>
+        <p class="muted">Guild: <strong>${escapeHtml(inv.guildName || inv.guildId)}</strong></p>
+        <p class="muted">You can manage commands &amp; welcome for <em>your server only</em>.</p>
+        <form method="POST" action="${path('/register')}" autocomplete="off">
+          <input type="hidden" name="token" value="${escapeHtml(token)}"/>
+          <label>Username</label>
+          <input name="username" required style="width:100%;margin-bottom:10px"/>
+          <label>Password</label>
+          <input type="password" name="password" required minlength="6" style="width:100%;margin-bottom:12px"/>
+          <button class="btn" type="submit">Create account</button>
+        </form>
+      </div></div>`,
+      'login',
+    ),
+  );
+});
+
+app.post(path('/register'), express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    const username = String(req.body.username || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (!token || !username || password.length < 6) {
+      return res.status(400).send('Invalid form');
+    }
+    const inv = await discordClient.db.get(`dashboard:invite:${token}`, null);
+    if (!inv || inv.used) return res.status(400).send('Invite invalid');
+    const exists = await discordClient.db.get(`dashboard:user:${username}`, null);
+    if (exists) return res.status(400).send('Username taken');
+    const cryptoNode = await import('crypto');
+    const hash = cryptoNode.createHash('sha256').update(password + ':' + username).digest('hex');
+    await discordClient.db.set(`dashboard:user:${username}`, {
+      username,
+      passwordHash: hash,
+      role: 'guild_admin',
+      guildIds: [inv.guildId],
+      discordUserId: inv.ownerId || null,
+      createdAt: Date.now(),
+    });
+    inv.used = true;
+    await discordClient.db.set(`dashboard:invite:${token}`, inv);
+    const sess = createSession({
+      role: 'guild_admin',
+      guildId: inv.guildId,
+      allowedGuilds: [inv.guildId],
+      userId: username,
+    });
+    setSessionCookie(res, sess);
+    return res.redirect(303, path('/dashboard'));
+  } catch (e) {
+    return res.status(500).send(String(e.message || e));
+  }
+});
 
 
 export function startServer(client) {
