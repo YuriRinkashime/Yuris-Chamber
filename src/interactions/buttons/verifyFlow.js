@@ -3,17 +3,11 @@ import {
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
-  MessageFlags } from 'discord.js';
+  MessageFlags,
+} from 'discord.js';
+import { getVerifyConfig } from '../../services/verifyConfig.js';
 
 const pending = (globalThis.__yuriVerifyPending ??= new Map());
-
-const AGE_ROLES = ['13-17', '18-23', '24+'];
-const GENDER_ROLES = ['Male', 'Female', 'Non-binary / Other'];
-const RANK_ROLES = [
-  'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum',
-  'Diamond', 'Ascendant', 'Immortal', 'Radiant',
-  'Unranked', "Doesn't Play Valo",
-];
 
 function keyOf(i) {
   return `${i.guildId}:${i.user.id}`;
@@ -37,202 +31,140 @@ function summary(s) {
     s.rank ? `**Rank / status:** ${s.rank}` : '**Rank / status:** —',
   ].join('\n');
 }
-
 function alreadyVerified(member) {
   return member.roles.cache.some((r) => r.name === 'Verified');
 }
-
 async function blockIfVerified(interaction) {
   if (alreadyVerified(interaction.member)) {
     const payload = {
-      content: '❌ You are **already verified**. You cannot use this panel again.',
-      flags: MessageFlags.Ephemeral };
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(payload).catch(() => {});
-    } else {
-      await interaction.reply(payload).catch(() => {});
-    }
+      content: '❌ You are **already verified**.',
+      flags: MessageFlags.Ephemeral,
+    };
+    if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
+    else await interaction.reply(payload).catch(() => {});
     return true;
   }
   return false;
 }
-
-function ageRow() {
+function selectRow(customId, placeholder, options) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('verify_age')
-      .setPlaceholder('Select your age...')
+      .setCustomId(customId)
+      .setPlaceholder(placeholder)
       .addOptions(
-        { label: '13-17', value: 'age_13_17', emoji: '🟢' },
-        { label: '18-23', value: 'age_18_23', emoji: '🟡' },
-        { label: '24+', value: 'age_24', emoji: '🔴' },
+        options.map((o) => ({
+          label: o.label.slice(0, 100),
+          value: o.value,
+          emoji: o.emoji || undefined,
+          description: o.description ? String(o.description).slice(0, 100) : undefined,
+        })),
       ),
   );
 }
-
-function genderRow() {
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('verify_gender')
-      .setPlaceholder('Select your gender...')
-      .addOptions(
-        { label: 'Male', value: 'gender_male', emoji: '♂️' },
-        { label: 'Female', value: 'gender_female', emoji: '♀️' },
-        { label: 'Non-binary / Other', value: 'gender_other', emoji: '🌈' },
-      ),
-  );
-}
-
-function rankRow() {
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('verify_rank')
-      .setPlaceholder('Rank or activity (Valo / other)...')
-      .addOptions(
-        { label: 'Iron', value: 'rank_iron', emoji: '⚫' },
-        { label: 'Bronze', value: 'rank_bronze', emoji: '🟤' },
-        { label: 'Silver', value: 'rank_silver', emoji: '⚪' },
-        { label: 'Gold', value: 'rank_gold', emoji: '🟡' },
-        { label: 'Platinum', value: 'rank_platinum', emoji: '🔵' },
-        { label: 'Diamond', value: 'rank_diamond', emoji: '💎' },
-        { label: 'Ascendant', value: 'rank_ascendant', emoji: '🟢' },
-        { label: 'Immortal', value: 'rank_immortal', emoji: '🔴' },
-        { label: 'Radiant', value: 'rank_radiant', emoji: '✨' },
-        { label: 'Unranked', value: 'rank_unranked', emoji: '❔' },
-        {
-          label: "Doesn't Play Valo",
-          value: 'rank_no_valo',
-          emoji: '🎮',
-          description: 'Here for other games / hangout',
-        },
-      ),
-  );
-}
-
 function backButton(id) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(id)
-      .setLabel('Back')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('⬅️'),
+    new ButtonBuilder().setCustomId(id).setLabel('Back').setStyle(ButtonStyle.Secondary).setEmoji('◀️'),
   );
 }
-
-async function assignRole(member, roleName, groupNames) {
+async function assignRole(member, roleName, allowedNames) {
+  if (!roleName) return;
   const guild = member.guild;
   const me = guild.members.me;
-  if (!me?.permissions.has('ManageRoles')) {
-    throw new Error('I need the **Manage Roles** permission.');
+  if (!me?.permissions.has('ManageRoles')) throw new Error('I need **Manage Roles**.');
+  let role = guild.roles.cache.find((r) => r.name === roleName);
+  if (!role) {
+    role = await guild.roles.create({ name: roleName, reason: 'Verification auto-create' }).catch(() => null);
   }
-  const role = guild.roles.cache.find((r) => r.name === roleName);
-  if (!role) throw new Error(`Role **"${roleName}"** not found.`);
+  if (!role) throw new Error(`Could not find/create role **${roleName}**.`);
   if (role.managed) throw new Error(`Role **"${roleName}"** is managed.`);
   if (role.position >= me.roles.highest.position) {
-    throw new Error(`My role is below **"${roleName}"**. Move it higher.`);
+    throw new Error(`Move my role **above** **${roleName}**.`);
   }
-  const toRemove = member.roles.cache.filter(
-    (r) => groupNames.includes(r.name) && r.id !== role.id,
-  );
-  if (toRemove.size > 0) await member.roles.remove(toRemove);
-  await member.roles.add(role);
+  const remove = member.roles.cache.filter((r) => allowedNames.includes(r.name) && r.id !== role.id);
+  if (remove.size) await member.roles.remove(remove).catch(() => {});
+  if (!member.roles.cache.has(role.id)) await member.roles.add(role);
 }
-
 async function safeError(interaction, message) {
   const payload = { content: `❌ ${message}`, flags: MessageFlags.Ephemeral };
   try {
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(payload);
-    } else {
-      await interaction.reply(payload);
-    }
-  } catch {}
+    if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
+    else await interaction.reply(payload);
+  } catch (_) {}
 }
 
 export default [
-  // Back → choose age again (private)
   {
     name: 'verify_back_age',
     async execute(interaction) {
       try {
         if (await blockIfVerified(interaction)) return;
-
+        const cfg = await getVerifyConfig(interaction.client, interaction.guildId);
         setPending(interaction, { age: null, gender: null, rank: null });
-
         await interaction.update({
-          content:
-            `**Step 1/3 — Choose your Age**\n` +
-            `Pick again below.`,
-          components: [ageRow()] });
+          content: '**Step 1/3 — Age**',
+          components: [selectRow('verify_age', 'Select your age...', cfg.ages)],
+        });
       } catch (err) {
-        await safeError(interaction, err.message || 'Something went wrong.');
+        await safeError(interaction, err.message || 'Error');
       }
-    } },
-
-  // Back → gender
+    },
+  },
   {
     name: 'verify_back_gender',
     async execute(interaction) {
       try {
         if (await blockIfVerified(interaction)) return;
-
+        const cfg = await getVerifyConfig(interaction.client, interaction.guildId);
         const state = setPending(interaction, { gender: null, rank: null });
-        if (!state.age) {
-          return safeError(interaction, 'Session expired. Use the channel panel again.');
-        }
-
+        if (!state.age) return safeError(interaction, 'Session expired.');
         await interaction.update({
-          content:
-            `✅ Age selected: **${state.age}**\n\n` +
-            `**Step 2/3 — Choose your Gender**`,
-          components: [genderRow(), backButton('verify_back_age')] });
+          content: `✅ Age: **${state.age}**\n\n**Step 2/3 — Gender**`,
+          components: [
+            selectRow('verify_gender', 'Select your gender...', cfg.genders),
+            backButton('verify_back_age'),
+          ],
+        });
       } catch (err) {
-        await safeError(interaction, err.message || 'Something went wrong.');
+        await safeError(interaction, err.message || 'Error');
       }
-    } },
-
-  // Back → rank
+    },
+  },
   {
     name: 'verify_back_rank',
     async execute(interaction) {
       try {
         if (await blockIfVerified(interaction)) return;
-
+        const cfg = await getVerifyConfig(interaction.client, interaction.guildId);
         const state = setPending(interaction, { rank: null });
-        if (!state.age || !state.gender) {
-          return safeError(interaction, 'Session expired. Use the channel panel again.');
-        }
-
+        if (!state.age || !state.gender) return safeError(interaction, 'Session expired.');
         await interaction.update({
-          content: `${summary(state)}\n\n**Step 3/3 — Rank / activity** (Valorant, Unranked, or Doesn't Play Valo)`,
-          components: [rankRow(), backButton('verify_back_gender')] });
+          content: `${summary(state)}\n\n**Step 3/3 — Rank / activity**`,
+          components: [
+            selectRow('verify_rank', 'Rank or activity...', cfg.ranks),
+            backButton('verify_back_gender'),
+          ],
+        });
       } catch (err) {
-        await safeError(interaction, err.message || 'Something went wrong.');
+        await safeError(interaction, err.message || 'Error');
       }
-    } },
-
-  // Confirm → give all roles
+    },
+  },
   {
     name: 'verify_confirm',
     async execute(interaction) {
       try {
         if (await blockIfVerified(interaction)) return;
-
         const state = getPending(interaction);
         if (!state.age || !state.gender || !state.rank) {
-          return safeError(interaction, 'Session expired. Use the channel panel again.');
+          return safeError(interaction, 'Session expired. Use the panel again.');
         }
-
+        const cfg = await getVerifyConfig(interaction.client, interaction.guildId);
         await interaction.deferUpdate();
-
         const member = interaction.member;
-        await assignRole(member, state.age, AGE_ROLES);
-        await assignRole(member, state.gender, GENDER_ROLES);
-        await assignRole(member, state.rank, RANK_ROLES);
-
-        const verifiedRole = interaction.guild.roles.cache.find(
-          (r) => r.name === 'Verified',
-        );
+        await assignRole(member, state.age, cfg.ages.map((a) => a.roleName));
+        await assignRole(member, state.gender, cfg.genders.map((g) => g.roleName));
+        await assignRole(member, state.rank, cfg.ranks.map((r) => r.roleName));
+        const verifiedRole = interaction.guild.roles.cache.find((r) => r.name === 'Verified');
         if (verifiedRole) {
           const me = interaction.guild.members.me;
           if (
@@ -243,23 +175,20 @@ export default [
             await member.roles.add(verifiedRole).catch(() => {});
           }
         }
-
         clearPending(interaction);
-
         await interaction.editReply({
-          content:
-            `🎉 **You are verified!**\n\n${summary(state)}\n\n` +
-            `All roles applied. Welcome to BANORANT!`,
-          components: [] });
-
-        await interaction.followUp({
-          content:
-            '🎂 **Tip:** Use `/birthday set` with your birth year, month, and day.\n' +
-            'We can greet you on your birthday and auto-update your age role (13-17 → 18-23 → 24+).',
-          flags: MessageFlags.Ephemeral }).catch(() => {});
-        
+          content: `🎉 **You are verified!**\n\n${summary(state)}\n\nWelcome to **BANORANT CAFE** 🎮`,
+          components: [],
+        });
+        await interaction
+          .followUp({
+            content: '🎂 Tip: `/birthday set` for birthday greetings & age role updates.',
+            flags: MessageFlags.Ephemeral,
+          })
+          .catch(() => {});
       } catch (err) {
-        await safeError(interaction, err.message || 'Something went wrong.');
+        await safeError(interaction, err.message || 'Error');
       }
-    } },
+    },
+  },
 ];

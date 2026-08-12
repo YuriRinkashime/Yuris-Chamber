@@ -241,74 +241,57 @@ export async function upsertOwnerPollCard(client, poll, { note = null } = {}) {
 }
 
 /** Public poll embed — hide live counts until closed */
-export function buildPollEmbed(poll, { final = false } = {}) {
-  const { options, total, winners, max } = getPollStats(poll);
-  const reveal = final || poll.ended === true;
+export function buildPollEmbed(poll) {
+  const { options, total } = getPollStats(poll);
+  const lines = options.map((o, i) => {
+    const n = (o.votes || []).length ?? o.votes;
+    const count = typeof n === 'number' ? n : 0;
+    const pct = total ? Math.round((count / total) * 100) : 0;
+    // hide live counts if configured
+    if (poll.showCounts) {
+      return `**${i + 1}.** ${o.label}\n\`${bar(pct)}\` · **${count}** (${pct}%)`;
+    }
+    return `**${i + 1}.** ${o.label}`;
+  });
 
-  let lines;
-  if (reveal) {
-    lines = options.map((o, i) => {
-      const pct = total ? Math.round((o.votes / total) * 100) : 0;
-      const medal =
-        max > 0 && o.votes === max
-          ? winners.length === 1
-            ? '🏆 '
-            : '🤝 '
-          : `**${i + 1}.** `;
-      return `${medal}**${o.label}**\n\`${bar(pct)}\` **${o.votes}** · ${pct}%`;
-    });
-  } else {
-    lines = options.map((o, i) => `**${i + 1}.** ${o.label}`);
-  }
+  const ends = poll.ended
+    ? 'Ended'
+    : poll.endsAt
+      ? `Ends <t:${Math.floor(poll.endsAt / 1000)}:R>\n<t:${Math.floor(poll.endsAt / 1000)}:f>`
+      : 'Open';
 
-  let winnerLine = '';
-  if (reveal) {
-    if (max === 0) winnerLine = '\n\n**Result:** No votes cast.';
-    else if (winners.length === 1)
-      winnerLine = `\n\n🏆 **Winner: ${winners[0]}** (${max} vote${max === 1 ? '' : 's'})`;
-    else
-      winnerLine = `\n\n🤝 **Tie:** ${winners.join(' · ')} (${max} each)`;
-  }
-
-  const ends = poll.endsAt
-    ? `<t:${Math.floor(poll.endsAt / 1000)}:R>\n<t:${Math.floor(poll.endsAt / 1000)}:f>`
-    : '—';
+  const statusLine = poll.paused
+    ? '⏸️ **Paused**'
+    : poll.ended
+      ? '🏁 **Closed**'
+      : '🟢 **Live**';
 
   const embed = new EmbedBuilder()
-    .setColor(reveal ? 0x0fdda3 : 0xff4655)
-    .setTitle(reveal ? `Poll closed · ${poll.question}` : `📊 ${poll.question}`)
-    .setDescription(lines.join('\n\n') + winnerLine)
+    .setColor(poll.ended ? 0x2f3136 : poll.paused ? 0xfaa61a : 0xff4655)
+    .setTitle(`📊 ${String(poll.question || 'Poll').slice(0, 240)}`)
+    .setDescription(
+      `${statusLine}\n\n${lines.join('\n\n') || '_No options_'}`,
+    )
     .addFields(
       {
-        name: reveal ? 'Closed' : '⏱ Ends',
-        value: reveal
-          ? poll.endedAt
-            ? `<t:${Math.floor(poll.endedAt / 1000)}:f>`
-            : 'Closed'
-          : ends,
+        name: '⏰ Time',
+        value: ends,
         inline: true,
       },
       {
-        name: reveal ? 'Total votes' : 'Options',
-        value: reveal ? `**${total}**` : `**${options.length}** choices`,
-        inline: true,
-      },
-      {
-        name: 'Status',
-        value: reveal
-          ? '🔒 Results in'
-          : isMaintenanceModeRuntime()
-            ? '🛠️ Paused · maintenance'
-            : '🗳️ Voting open',
+        name: '🗳️ Votes',
+        value: poll.showCounts || poll.ended ? `**${total}** total` : 'Hidden until end',
         inline: true,
       },
     )
     .setFooter({
-      text: reveal
-        ? "Yuri's Chamber · results"
-        : "Yuri's Chamber · votes are hidden until the poll ends · change vote anytime",
-    })
-    .setTimestamp(reveal ? new Date(poll.endedAt || Date.now()) : new Date());
+      text: poll.ended
+        ? "Yuri's Chamber · Poll ended"
+        : "Yuri's Chamber · Cast your vote",
+    });
+
+  if (poll.endsAt && !poll.ended) embed.setTimestamp(poll.endsAt);
+  else embed.setTimestamp(poll.endedAt || poll.createdAt || Date.now());
 
   return embed;
 }

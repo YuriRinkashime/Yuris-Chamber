@@ -78,14 +78,17 @@ function defaultModel() {
 export async function getAiConfig(client, guildId) {
   const key = `guild:${guildId}:ai`;
   const data = (await client.db?.get(key, null)) || null;
-  const modelId = data?.modelId || defaultModelId();
-  const catalog = findAiModel(modelId) || findAiModel(data?.model) || findAiModel(defaultModelId());
+  let catalog =
+    findAiModel(data?.modelId) ||
+    findAiModel(data?.model) ||
+    findAiModel(defaultModelId());
+  if (!catalog) catalog = AI_MODELS[0];
   return {
     enabled: data?.enabled ?? process.env.AI_ENABLED === 'true',
     systemInstructions: data?.systemInstructions || DEFAULT_INSTRUCTIONS,
-    modelId: catalog?.id || modelId,
-    model: catalog?.model || data?.model || defaultModel(),
-    provider: catalog?.provider || provider(),
+    modelId: catalog.id,
+    model: catalog.model,
+    provider: catalog.provider,
     maxReplyLength: data?.maxReplyLength || 1800,
   };
 }
@@ -146,9 +149,13 @@ export async function getUserAiPrefs(client, guildId, userId) {
 /** Resolve which catalog model a user should use (user override → server default) */
 export async function resolveUserModel(client, guildId, userId) {
   const prefs = await getUserAiPrefs(client, guildId, userId);
+  // User override wins and is never written to server config
+  if (prefs?.modelId) {
+    const userModel = findAiModel(prefs.modelId);
+    if (userModel) return userModel;
+  }
   const guild = await getAiConfig(client, guildId);
   const chosen =
-    findAiModel(prefs.modelId) ||
     findAiModel(guild.modelId) ||
     findAiModel(guild.model) ||
     findAiModel(defaultModelId()) ||

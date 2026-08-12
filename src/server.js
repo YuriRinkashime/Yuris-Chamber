@@ -198,7 +198,7 @@ body::after{
   mask-image:radial-gradient(ellipse at center,black 20%,transparent 75%);
 }
 a{color:inherit;text-decoration:none}
-.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px;overflow-x:hidden;width:100%;box-sizing:border-boxpadding-top:72px;}
+.shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:22px 16px 40px;overflow-x:hidden;width:100%;box-sizing:border-box;padding-top:72px;}
 ${isLogin ? '.shell{max-width:100%;height:100vh;padding:0;display:flex;flex-direction:column}' : ''}
 
 .hero{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -213,7 +213,7 @@ ${isLogin ? '.shell{max-width:100%;height:100vh;padding:0;display:flex;flex-dire
 .brand{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;line-height:1}
 .brand span{display:block;font-family:var(--font);font-size:11px;font-weight:500;color:var(--muted);margin-top:4px;letter-spacing:.14em}
 
-.top{
+.top{position:sticky;top:0;z-index:50;
   position:fixed;top:0;left:0;right:0;z-index:1000;
   display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
   padding:10px 16px;
@@ -398,10 +398,11 @@ body.is-login .top,body.is-login .hero{display:none !important}
 }
 
 @media (max-width:720px){
-  .shell{padding:12px 12px;padding-top:118px}
+  .shell{padding:12px 12px;padding-top:140px !important}
   .top{
     flex-direction:column;align-items:stretch;gap:8px;
     padding:8px 10px;
+    position:fixed;top:0;left:0;right:0;z-index:100;
   }
   .nav{
     display:grid !important;
@@ -433,10 +434,14 @@ body.is-login .top,body.is-login .hero{display:none !important}
 .shell-main{padding-top:8px;max-width:1100px;margin:0 auto}
 .shell{padding-top:78px !important}
 @media (max-width:720px){
-  .shell{padding-top:128px !important}
+  .shell{padding-top:150px !important}
+  .shell-main{padding-top:12px}
   .top-brand .brand{font-size:14px}
   .top{flex-direction:column;align-items:stretch}
-  .top-brand{justify-content:center}
+  .top-brand{justify-content:center;padding-top:4px}
+  h1{margin-top:8px}
+  .banner{margin-top:8px}
+  .card:first-of-type{margin-top:8px}
 }
 
 </style>

@@ -14,17 +14,17 @@ import {
 export default {
   data: new SlashCommandBuilder()
     .setName('aimodel')
-    .setDescription('View or set YOUR AI model (keeps the same chat history)')
+    .setDescription('Set YOUR personal AI model only (does not change server default)')
     .addStringOption((o) =>
       o
         .setName('model')
-        .setDescription('Model to use (leave empty to see current + list)')
+        .setDescription('Your model (leave empty to see current)')
         .setRequired(false)
         .addChoices(
           { name: 'CosmosRP V2.1 (Vision · RP)', value: 'cosmosrp-2.1' },
           { name: 'Gemma 4 26B Free (OpenRouter)', value: 'gemma-4-26b-free' },
           { name: 'Llama 3.3 70B (Naga free)', value: 'naga-llama-free' },
-          { name: 'Server default (reset)', value: 'default' },
+          { name: 'Use server default', value: 'default' },
         ),
     ),
 
@@ -42,8 +42,9 @@ export default {
         const server = await getAiConfig(client, guildId);
         return interaction.reply({
           content:
-            `✅ Your AI model is now the **server default**: \`${server.modelId}\` (${server.model}).\n` +
-            `_Chat history is shared — only the model changes._`,
+            `✅ **Only you** now use the server default: **${server.modelId}**.\n` +
+            `_This does **not** change the server setting for others._\n` +
+            `_Chat history is unchanged._`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -54,9 +55,10 @@ export default {
       await saveUserAiPrefs(client, guildId, userId, { modelId: m.id });
       return interaction.reply({
         content:
-          `✅ Your AI model is now **${m.label}** (\`${m.id}\`).\n` +
-          `${m.vision ? '👁 Vision: yes' : '📝 Text only'} · ${m.free ? 'Free' : 'Key required'}\n` +
-          `_Same conversation history — only the engine changes._`,
+          `✅ **Your personal model** is now **${m.label}**.\n` +
+          `${m.vision ? '👁 Vision' : '📝 Text'} · ${m.free ? 'Free' : 'Key required'}\n` +
+          `_Only affects **you** — server default is unchanged._\n` +
+          `_Same conversation history._`,
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -67,18 +69,20 @@ export default {
     const lines = listAiModels()
       .map(
         (m) =>
-          `• **${m.label}** — \`${m.id}\`${m.id === current.id ? ' ← **you**' : ''}${
-            m.id === server.modelId ? ' _(server default)_' : ''
-          }`,
+          `• **${m.label}** (\`${m.id}\`)` +
+          (m.id === current.id ? ' ← **you**' : '') +
+          (m.id === server.modelId ? ' · server default' : ''),
       )
       .join('\n');
 
     return interaction.reply({
       content:
-        `**Your AI model:** ${current.label} (\`${current.id}\`)\n` +
-        `Source: ${prefs.modelId ? 'your override' : 'server default'}\n\n` +
-        `**Available models**\n${lines}\n\n` +
-        `Switch with \`/aimodel model:\` — history stays the same.`,
+        `**Your model:** ${current.label}\n` +
+        `**Scope:** ${prefs.modelId ? 'personal override' : 'following server default'}\n` +
+        `**Server default:** ${server.modelId}\n\n` +
+        `${lines}\n\n` +
+        `\`/aimodel model:\` changes **only your** model.\n` +
+        `Server default is set in the **dashboard → AI**.`,
       flags: MessageFlags.Ephemeral,
     });
   },

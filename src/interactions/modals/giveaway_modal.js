@@ -56,16 +56,23 @@ export default {
 
     const embed = new EmbedBuilder()
       .setColor(0xff4655)
-      .setTitle('🎉 Giveaway')
+      .setTitle('🎉 GIVEAWAY')
       .setDescription(
-        `**Prize:** ${prize}\n` +
-          (description ? `${description}\n\n` : '') +
-          `**Winners:** ${winners}\n` +
-          `**Ends:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n` +
-          (reqLines.length ? `\n**Requirements**\n${reqLines.join('\n')}` : '\n_No special requirements_') +
-          `\n\nClick **Enter** to join!`,
+        `### ${prize}
+` +
+          (description ? `${description}
+
+` : '') +
+          `**Winners:** ${winners}
+` +
+          `**Ends:** <t:${Math.floor(endsAt / 1000)}:R> · <t:${Math.floor(endsAt / 1000)}:f>
+` +
+          (reqLines.length ? `
+**Requirements**
+${reqLines.join('\n')}` : '\n_No special requirements_') +
+          `\n\n👇 Click **Enter** to join`,
       )
-      .setFooter({ text: `Hosted by ${interaction.user.tag}` })
+      .setFooter({ text: `Hosted by ${interaction.user.tag} · Yuri's Chamber` })
       .setTimestamp(endsAt);
 
     const row = new ActionRowBuilder().addComponents(
