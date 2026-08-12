@@ -2764,7 +2764,97 @@ app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended:
 
 
 
+
 // ——— Message editor (bot-owned messages) ———
+function parseMessageRef(body = {}) {
+  let channelId = String(body.channelId || '').trim();
+  let messageId = String(body.messageId || '').trim();
+  const link = String(body.link || body.messageLink || '').trim();
+  if (link) {
+    const m = link.match(/channels\/\d+\/(\d+)\/(\d+)/);
+    if (m) {
+      channelId = m[1];
+      messageId = m[2];
+    }
+  }
+  return { channelId, messageId, link };
+}
+
+function serializeComponents(msg) {
+  const rows = [];
+  try {
+    for (const row of msg.components || []) {
+      const line = { type: 1, components: [] };
+      for (const c of row.components || []) {
+        const raw = typeof c.toJSON === 'function' ? c.toJSON() : c;
+        line.components.push(raw);
+      }
+      if (line.components.length) rows.push(line);
+    }
+  } catch (_) {}
+  return rows;
+}
+
+function componentsSummaryHtml(components) {
+  if (!components?.length) return '<p class="muted">No buttons or menus on this message.</p>';
+  let html = '<div class="card" style="background:rgba(0,0,0,.25);margin-top:10px"><h2>Components detected</h2>';
+  let i = 0;
+  for (const row of components) {
+    for (const c of row.components || []) {
+      const t = c.type;
+      if (t === 2) {
+        html += `<div style="margin:8px 0;padding:8px;border:1px solid rgba(255,70,85,.25)">
+          <strong>Button</strong> · customId <code>${escapeHtml(c.custom_id || c.customId || '')}</code>
+          <label>Label</label>
+          <input type="text" name="btn_label_${i}" value="${escapeHtml(c.label || '')}" style="width:100%"/>
+          <input type="hidden" name="btn_id_${i}" value="${escapeHtml(c.custom_id || c.customId || '')}"/>
+        </div>`;
+      } else if (t === 3 || t === 5 || t === 6 || t === 7 || t === 8) {
+        const opts = c.options || [];
+        html += `<div style="margin:8px 0;padding:8px;border:1px solid rgba(255,70,85,.25)">
+          <strong>Select menu</strong> · customId <code>${escapeHtml(c.custom_id || c.customId || '')}</code>
+          <label>Placeholder</label>
+          <input type="text" name="sel_placeholder_${i}" value="${escapeHtml(c.placeholder || '')}" style="width:100%"/>
+          <input type="hidden" name="sel_id_${i}" value="${escapeHtml(c.custom_id || c.customId || '')}"/>
+          <p class="muted" style="margin-top:6px">${opts.length} option(s) kept (values preserved so verification still works)</p>
+        </div>`;
+      } else {
+        html += `<p class="muted">Component type ${t} (preserved as-is)</p>`;
+      }
+      i += 1;
+    }
+  }
+  html += `<input type="hidden" name="compCount" value="${i}"/></div>`;
+  return html;
+}
+
+function rebuildComponentsFromBody(body, original) {
+  const labelMap = {};
+  const phMap = {};
+  const count = Number(body.compCount || 0);
+  for (let i = 0; i < count; i++) {
+    if (body[`btn_id_${i}`]) labelMap[String(body[`btn_id_${i}`])] = String(body[`btn_label_${i}`] || '');
+    if (body[`sel_id_${i}`]) phMap[String(body[`sel_id_${i}`])] = String(body[`sel_placeholder_${i}`] || '');
+  }
+  const out = [];
+  for (const row of original || []) {
+    const comps = [];
+    for (const c of row.components || []) {
+      const copy = { ...c };
+      const cid = copy.custom_id || copy.customId;
+      if (copy.type === 2 && cid && labelMap[cid] != null) {
+        copy.label = labelMap[cid].slice(0, 80) || copy.label;
+      }
+      if ((copy.type === 3 || copy.type === 5 || copy.type === 6 || copy.type === 7 || copy.type === 8) && cid && phMap[cid] != null) {
+        copy.placeholder = phMap[cid].slice(0, 150) || copy.placeholder;
+      }
+      comps.push(copy);
+    }
+    if (comps.length) out.push({ type: 1, components: comps });
+  }
+  return out;
+}
+
 app.get(path('/dashboard/messages'), requireAuth, async (req, res) => {
   if (req.dashRole === 'guild_admin') {
     return res.status(403).send(layoutFor(req, 'Forbidden', '<p class="err">Owner only.</p>', ''));
@@ -2774,6 +2864,7 @@ app.get(path('/dashboard/messages'), requireAuth, async (req, res) => {
     : req.query.err
       ? `<p class="err">${escapeHtml(String(req.query.err))}</p>`
       : '';
+
   res.send(
     layoutFor(
       req,
@@ -2781,42 +2872,27 @@ app.get(path('/dashboard/messages'), requireAuth, async (req, res) => {
       `<h1 class="section-title">Edit bot messages</h1>
       ${flash}
       <div class="card">
-        <p class="muted">Paste a message link or channel ID + message ID. Only messages <strong>sent by this bot</strong> can be edited.</p>
-        <form method="post" action="${path('/dashboard/messages/edit')}">
-          <label>Message link (or leave blank and use IDs below)</label>
-          <input type="text" name="link" placeholder="https://discord.com/channels/guild/channel/message" style="width:100%;margin-bottom:10px"/>
-          <label>Channel ID</label>
-          <input type="text" name="channelId" style="width:100%;margin-bottom:10px"/>
-          <label>Message ID</label>
-          <input type="text" name="messageId" style="width:100%;margin-bottom:10px"/>
-          <label>New content (text only — embeds kept if present)</label>
-          <textarea name="content" rows="8" style="width:100%" required></textarea>
-          <div style="margin-top:12px"><button class="btn" type="submit">Edit message</button></div>
+        <p class="muted">Paste a Discord message link. Only messages <strong>sent by this bot</strong> can be edited.</p>
+        <form method="post" action="${path('/dashboard/messages/load')}">
+          <label>Message link</label>
+          <input type="text" name="link" placeholder="https://discord.com/channels/guildId/channelId/messageId" style="width:100%;margin-bottom:10px" required/>
+          <button class="btn" type="submit">Load message</button>
         </form>
-      </div>`,
+      </div>
+      <p class="muted" style="margin-top:12px">Tip: right-click the bot message → Copy Message Link.</p>`,
       'messages',
     ),
   );
 });
 
-app.post(path('/dashboard/messages/edit'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+app.post(path('/dashboard/messages/load'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     if (req.dashRole === 'guild_admin') {
       return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Owner only'));
     }
-    let channelId = String(req.body.channelId || '').trim();
-    let messageId = String(req.body.messageId || '').trim();
-    const link = String(req.body.link || '').trim();
-    const content = String(req.body.content || '').slice(0, 2000);
-    if (link) {
-      const m = link.match(/channels\/\d+\/(\d+)\/(\d+)/);
-      if (m) {
-        channelId = m[1];
-        messageId = m[2];
-      }
-    }
-    if (!channelId || !messageId || !content) {
-      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Missing channel/message/content'));
+    const { channelId, messageId } = parseMessageRef(req.body);
+    if (!channelId || !messageId) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Invalid link'));
     }
     const ch = await discordClient.channels.fetch(channelId).catch(() => null);
     if (!ch?.isTextBased?.()) {
@@ -2829,12 +2905,159 @@ app.post(path('/dashboard/messages/edit'), requireAuth, express.urlencoded({ ext
     if (msg.author?.id !== discordClient.user?.id) {
       return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Not a message from this bot'));
     }
-    await msg.edit({ content });
+
+    const comps = serializeComponents(msg);
+    const embed = msg.embeds?.[0];
+    const hasEmbed = Boolean(embed);
+    const hasComps = comps.length > 0;
+    const content = msg.content || '';
+    const embTitle = embed?.title || '';
+    const embDesc = embed?.description || '';
+    const embColor = embed?.color != null ? `#${Number(embed.color).toString(16).padStart(6, '0')}` : '#ff4655';
+
+    let mode = 'text';
+    if (hasEmbed && content) mode = 'both';
+    else if (hasEmbed) mode = 'embed';
+
+    const link = `https://discord.com/channels/${msg.guildId || '@me'}/${channelId}/${messageId}`;
+
+    res.send(
+      layoutFor(
+        req,
+        'Edit messages',
+        `<h1 class="section-title">Edit bot messages</h1>
+        <p class="ok">Message loaded · ${hasComps ? 'has buttons/menus' : 'no components'} · ${hasEmbed ? 'has embed' : 'no embed'}</p>
+        <div class="card">
+          <p class="muted">Link: <code>${escapeHtml(link)}</code></p>
+          <form method="post" action="${path('/dashboard/messages/edit')}">
+            <input type="hidden" name="channelId" value="${escapeHtml(channelId)}"/>
+            <input type="hidden" name="messageId" value="${escapeHtml(messageId)}"/>
+            <input type="hidden" name="link" value="${escapeHtml(link)}"/>
+            <input type="hidden" name="origComponents" value="${escapeHtml(JSON.stringify(comps))}"/>
+
+            <label>Display mode</label>
+            <input type="hidden" name="mode" id="msgMode" value="${mode}"/>
+            <div class="vbtn-row">
+              <button type="button" class="vtoggle ${mode === 'text' ? 'on' : 'off'}" data-mode="text">Text only</button>
+              <button type="button" class="vtoggle ${mode === 'embed' ? 'on' : 'off'}" data-mode="embed">Card (embed)</button>
+              <button type="button" class="vtoggle ${mode === 'both' ? 'on' : 'off'}" data-mode="both">Text + card</button>
+            </div>
+
+            <div id="textBlock" style="${mode === 'embed' ? 'display:none' : ''}">
+              <label>Text content</label>
+              <textarea name="content" rows="8" style="width:100%">${escapeHtml(content)}</textarea>
+            </div>
+
+            <div id="embedBlock" style="${mode === 'text' ? 'display:none' : ''}">
+              <label>Embed title</label>
+              <input type="text" name="embedTitle" value="${escapeHtml(embTitle)}" style="width:100%;margin-bottom:8px"/>
+              <label>Embed description</label>
+              <textarea name="embedDescription" rows="8" style="width:100%">${escapeHtml(embDesc)}</textarea>
+              <label>Embed color</label>
+              <input type="text" name="embedColor" value="${escapeHtml(embColor)}" style="width:140px"/>
+            </div>
+
+            ${componentsSummaryHtml(comps)}
+
+            <p class="muted" style="margin-top:12px">Verification menus keep the same option values so the bot still works. You can change placeholders and button labels.</p>
+            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn" type="submit">Save edit</button>
+              <a class="btn secondary" href="${path('/dashboard/messages')}">Cancel</a>
+            </div>
+          </form>
+        </div>
+        <script>
+        (function(){
+          var modeInp = document.getElementById('msgMode');
+          var textBlock = document.getElementById('textBlock');
+          var embedBlock = document.getElementById('embedBlock');
+          document.querySelectorAll('[data-mode]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var m = btn.getAttribute('data-mode');
+              modeInp.value = m;
+              document.querySelectorAll('[data-mode]').forEach(function(b){
+                var on = b.getAttribute('data-mode') === m;
+                b.classList.toggle('on', on);
+                b.classList.toggle('off', !on);
+              });
+              textBlock.style.display = m === 'embed' ? 'none' : '';
+              embedBlock.style.display = m === 'text' ? 'none' : '';
+            });
+          });
+        })();
+        </script>`,
+        'messages',
+      ),
+    );
+  } catch (e) {
+    return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent(e.message || 'Load failed'));
+  }
+});
+
+app.post(path('/dashboard/messages/edit'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    if (req.dashRole === 'guild_admin') {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Owner only'));
+    }
+    const { channelId, messageId } = parseMessageRef(req.body);
+    if (!channelId || !messageId) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Missing message ref'));
+    }
+    const ch = await discordClient.channels.fetch(channelId).catch(() => null);
+    if (!ch?.isTextBased?.()) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Invalid channel'));
+    }
+    const msg = await ch.messages.fetch(messageId).catch(() => null);
+    if (!msg) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Message not found'));
+    }
+    if (msg.author?.id !== discordClient.user?.id) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Not a message from this bot'));
+    }
+
+    const mode = String(req.body.mode || 'text');
+    let content = String(req.body.content || '');
+    const embTitle = String(req.body.embedTitle || '').slice(0, 256);
+    const embDesc = String(req.body.embedDescription || '').slice(0, 4096);
+    let colorRaw = String(req.body.embedColor || '#ff4655').replace('#', '');
+    let color = parseInt(colorRaw, 16);
+    if (!Number.isFinite(color)) color = 0xff4655;
+
+    let embeds = [];
+    if (mode === 'embed' || mode === 'both') {
+      const emb = {};
+      if (embTitle) emb.title = embTitle;
+      if (embDesc) emb.description = embDesc;
+      emb.color = color;
+      embeds = [emb];
+    }
+    if (mode === 'embed') content = null;
+    if (mode === 'text') embeds = [];
+
+    let components;
+    try {
+      const orig = JSON.parse(String(req.body.origComponents || '[]'));
+      components = rebuildComponentsFromBody(req.body, orig);
+    } catch (_) {
+      components = serializeComponents(msg);
+    }
+
+    const payload = {
+      content: content === null ? null : String(content).slice(0, 2000),
+      embeds,
+      components,
+    };
+    if (!payload.content && !(payload.embeds && payload.embeds.length) && !(payload.components && payload.components.length)) {
+      return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent('Message would be empty'));
+    }
+
+    await msg.edit(payload);
     return res.redirect(path('/dashboard/messages') + '?ok=' + encodeURIComponent('Message updated'));
   } catch (e) {
     return res.redirect(path('/dashboard/messages') + '?err=' + encodeURIComponent(e.message || 'Edit failed'));
   }
 });
+
 
 // ——— Server-owner registration (limited dashboard) ———
 app.get(path('/register'), async (req, res) => {
