@@ -781,7 +781,7 @@ body.nav-open .nav-toggle .bars i:nth-child(3){transform:translateY(-7px) rotate
 }
 
 
-/* —— FINAL layout fix v2 —— */
+/* —— FINAL layout fix v3 (laptop-safe nav) —— */
 body{
   background: #0a0c10 !important;
   background-image:
@@ -790,15 +790,15 @@ body{
 }
 body::before, body::after{display:none !important; content:none !important; background:none !important}
 
-/* PC: nav truly centered in viewport */
 .top{
   position:fixed !important; top:0; left:0; right:0; z-index:1000 !important;
   display:flex !important;
   align-items:center !important;
   justify-content:space-between !important;
-  gap:12px !important;
-  padding:10px 20px !important;
-  background:rgba(8,10,14,.92) !important;
+  gap:10px !important;
+  padding:8px 16px !important;
+  min-height:56px;
+  background:rgba(8,10,14,.94) !important;
   backdrop-filter:blur(16px) !important;
   -webkit-backdrop-filter:blur(16px) !important;
   border-bottom:1px solid rgba(255,70,85,.2) !important;
@@ -807,27 +807,48 @@ body::before, body::after{display:none !important; content:none !important; back
   flex-direction:row !important;
 }
 .top-brand{
-  display:flex; align-items:center; gap:10px;
-  flex:0 0 auto; z-index:2;
+  display:flex; align-items:center; gap:8px;
+  flex:0 0 auto; z-index:2; max-width:200px;
 }
+.top-brand .brand{font-size:14px !important; white-space:nowrap}
+.top-brand .brand span{font-size:9px !important}
 .top-actions{
   display:flex !important; align-items:center; gap:8px;
   flex:0 0 auto; z-index:2; margin-left:auto;
 }
+.top-actions .btn{padding:8px 12px; font-size:12px; white-space:nowrap}
+
+/* Centered single-row nav — no wrap */
 .top #mainNav, .top .nav{
   position:absolute !important;
   left:50% !important;
   transform:translateX(-50%) !important;
   display:flex !important;
-  flex-wrap:wrap;
+  flex-wrap:nowrap !important;
   justify-content:center;
   align-items:center;
-  gap:4px;
-  max-width:min(820px, calc(100vw - 280px));
+  gap:2px !important;
   margin:0 !important;
   z-index:1;
+  max-width:none !important;
+  width:auto !important;
+  padding:3px !important;
+  background:rgba(0,0,0,.35);
+  border:1px solid rgba(255,70,85,.18);
+  white-space:nowrap;
 }
-.shell{padding-top:72px !important}
+.top #mainNav .nav-link, .top .nav .nav-link{
+  padding:8px 10px !important;
+  font-size:12px !important;
+  letter-spacing:.04em !important;
+  white-space:nowrap !important;
+  flex-shrink:0;
+}
+.top #mainNav .nav-ico, .top .nav .nav-ico{
+  font-size:10px !important;
+}
+
+.shell{padding-top:68px !important}
 .shell-main{max-width:1100px; margin:0 auto; padding:8px 16px 40px}
 
 .nav-backdrop{
@@ -841,21 +862,33 @@ body::before, body::after{display:none !important; content:none !important; back
 }
 body.nav-open .nav-backdrop{display:block !important}
 
-@media (max-width:900px){
+/* Wide desktop: slightly roomier nav */
+@media (min-width:1400px){
+  .top #mainNav .nav-link, .top .nav .nav-link{
+    padding:10px 12px !important;
+    font-size:13px !important;
+  }
+  .top-brand .brand{font-size:16px !important}
+}
+
+/* Laptop / tablet landscape: hamburger so nav never wraps */
+@media (max-width:1200px){
   .top{
     position:fixed !important;
     padding:8px 12px !important;
   }
   .top #mainNav, .top .nav{
     position:fixed !important;
-    top:72px !important;
+    top:68px !important;
     left:50% !important;
     transform:translateX(-50%) !important;
     width:min(340px, calc(100vw - 24px)) !important;
     max-width:340px !important;
     z-index:950 !important;
     flex-direction:column !important;
+    flex-wrap:nowrap !important;
     justify-content:flex-start !important;
+    align-items:stretch !important;
     background:rgba(12,14,18,.98) !important;
     border:1px solid rgba(255,70,85,.4) !important;
     padding:8px !important;
@@ -863,6 +896,7 @@ body.nav-open .nav-backdrop{display:block !important}
     overflow:auto;
     box-shadow:0 20px 50px rgba(0,0,0,.6);
     display:none !important;
+    white-space:normal;
   }
   body.nav-open .top #mainNav, body.nav-open .top .nav{
     display:flex !important;
@@ -871,11 +905,12 @@ body.nav-open .nav-backdrop{display:block !important}
     width:100%;
     justify-content:flex-start !important;
     padding:12px 14px !important;
+    font-size:13px !important;
   }
   .nav-toggle{display:inline-flex !important}
   .shell{padding-top:64px !important}
 }
-@media (min-width:901px){
+@media (min-width:1201px){
   .nav-toggle{display:none !important}
 }
 
