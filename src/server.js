@@ -781,7 +781,7 @@ body.nav-open .nav-toggle .bars i:nth-child(3){transform:translateY(-7px) rotate
 }
 
 
-/* —— FINAL layout fix —— */
+/* —— FINAL layout fix v2 —— */
 body{
   background: #0a0c10 !important;
   background-image:
@@ -790,12 +790,13 @@ body{
 }
 body::before, body::after{display:none !important; content:none !important; background:none !important}
 
+/* PC: nav truly centered in viewport */
 .top{
   position:fixed !important; top:0; left:0; right:0; z-index:1000 !important;
-  display:grid !important;
-  grid-template-columns: auto 1fr auto !important;
+  display:flex !important;
   align-items:center !important;
-  gap:16px !important;
+  justify-content:space-between !important;
+  gap:12px !important;
   padding:10px 20px !important;
   background:rgba(8,10,14,.92) !important;
   backdrop-filter:blur(16px) !important;
@@ -805,27 +806,30 @@ body::before, body::after{display:none !important; content:none !important; back
   flex-wrap:nowrap !important;
   flex-direction:row !important;
 }
-.top-brand{justify-self:start; display:flex; align-items:center; gap:10px; min-width:0}
+.top-brand{
+  display:flex; align-items:center; gap:10px;
+  flex:0 0 auto; z-index:2;
+}
+.top-actions{
+  display:flex !important; align-items:center; gap:8px;
+  flex:0 0 auto; z-index:2; margin-left:auto;
+}
 .top #mainNav, .top .nav{
-  justify-self:center !important;
+  position:absolute !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
   display:flex !important;
   flex-wrap:wrap;
   justify-content:center;
   align-items:center;
   gap:4px;
-  max-width:100%;
-  margin:0 auto;
-}
-.top-actions{
-  justify-self:end !important;
-  display:flex !important;
-  align-items:center;
-  gap:8px;
+  max-width:min(820px, calc(100vw - 280px));
+  margin:0 !important;
+  z-index:1;
 }
 .shell{padding-top:72px !important}
 .shell-main{max-width:1100px; margin:0 auto; padding:8px 16px 40px}
 
-/* Full-screen blur when menu open */
 .nav-backdrop{
   display:none;
   position:fixed !important;
@@ -839,24 +843,26 @@ body.nav-open .nav-backdrop{display:block !important}
 
 @media (max-width:900px){
   .top{
-    grid-template-columns: 1fr auto !important;
+    position:fixed !important;
     padding:8px 12px !important;
   }
   .top #mainNav, .top .nav{
-    display:none !important;
     position:fixed !important;
-    top:60px !important;
+    top:72px !important;
     left:50% !important;
     transform:translateX(-50%) !important;
     width:min(340px, calc(100vw - 24px)) !important;
+    max-width:340px !important;
     z-index:950 !important;
     flex-direction:column !important;
+    justify-content:flex-start !important;
     background:rgba(12,14,18,.98) !important;
     border:1px solid rgba(255,70,85,.4) !important;
     padding:8px !important;
-    max-height:70vh;
+    max-height:calc(70vh - 12px);
     overflow:auto;
     box-shadow:0 20px 50px rgba(0,0,0,.6);
+    display:none !important;
   }
   body.nav-open .top #mainNav, body.nav-open .top .nav{
     display:flex !important;
