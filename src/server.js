@@ -780,6 +780,99 @@ body.nav-open .nav-toggle .bars i:nth-child(3){transform:translateY(-7px) rotate
   .nav-toggle{display:none !important}
 }
 
+
+/* —— FINAL layout fix —— */
+body{
+  background: #0a0c10 !important;
+  background-image:
+    radial-gradient(ellipse 120% 70% at 50% -30%, rgba(255,70,85,.13), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(255,70,85,.04), transparent 50%) !important;
+}
+body::before, body::after{display:none !important; content:none !important; background:none !important}
+
+.top{
+  position:fixed !important; top:0; left:0; right:0; z-index:1000 !important;
+  display:grid !important;
+  grid-template-columns: auto 1fr auto !important;
+  align-items:center !important;
+  gap:16px !important;
+  padding:10px 20px !important;
+  background:rgba(8,10,14,.92) !important;
+  backdrop-filter:blur(16px) !important;
+  -webkit-backdrop-filter:blur(16px) !important;
+  border-bottom:1px solid rgba(255,70,85,.2) !important;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+  flex-wrap:nowrap !important;
+  flex-direction:row !important;
+}
+.top-brand{justify-self:start; display:flex; align-items:center; gap:10px; min-width:0}
+.top #mainNav, .top .nav{
+  justify-self:center !important;
+  display:flex !important;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:center;
+  gap:4px;
+  max-width:100%;
+  margin:0 auto;
+}
+.top-actions{
+  justify-self:end !important;
+  display:flex !important;
+  align-items:center;
+  gap:8px;
+}
+.shell{padding-top:72px !important}
+.shell-main{max-width:1100px; margin:0 auto; padding:8px 16px 40px}
+
+/* Full-screen blur when menu open */
+.nav-backdrop{
+  display:none;
+  position:fixed !important;
+  inset:0 !important;
+  z-index:900 !important;
+  background:rgba(0,0,0,.45) !important;
+  backdrop-filter:blur(10px) !important;
+  -webkit-backdrop-filter:blur(10px) !important;
+}
+body.nav-open .nav-backdrop{display:block !important}
+
+@media (max-width:900px){
+  .top{
+    grid-template-columns: 1fr auto !important;
+    padding:8px 12px !important;
+  }
+  .top #mainNav, .top .nav{
+    display:none !important;
+    position:fixed !important;
+    top:60px !important;
+    left:50% !important;
+    transform:translateX(-50%) !important;
+    width:min(340px, calc(100vw - 24px)) !important;
+    z-index:950 !important;
+    flex-direction:column !important;
+    background:rgba(12,14,18,.98) !important;
+    border:1px solid rgba(255,70,85,.4) !important;
+    padding:8px !important;
+    max-height:70vh;
+    overflow:auto;
+    box-shadow:0 20px 50px rgba(0,0,0,.6);
+  }
+  body.nav-open .top #mainNav, body.nav-open .top .nav{
+    display:flex !important;
+  }
+  .top #mainNav .nav-link, .top .nav .nav-link{
+    width:100%;
+    justify-content:flex-start !important;
+    padding:12px 14px !important;
+  }
+  .nav-toggle{display:inline-flex !important}
+  .shell{padding-top:64px !important}
+}
+@media (min-width:901px){
+  .nav-toggle{display:none !important}
+}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -791,19 +884,21 @@ ${
         ${body}
        </div></div></div>`
     : `<div class="shell">
+        <div class="nav-backdrop" id="navBackdrop"></div>
         <div class="top">
           <div class="top-brand">
             <div class="avatar" style="width:36px;height:36px;font-size:14px">◆</div>
             <div class="brand" style="font-size:16px">Yuri's Chamber<span>BANORANT CAFE</span></div>
           </div>
+          <nav class="nav" id="mainNav">${nav}</nav>
           <div class="top-actions">
-          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu">
-            <div class="bars"><i></i><i></i><i></i></div>
-          </button>
-        </div>
-        <nav class="nav" id="mainNav">${nav}</nav>
-        <div class="nav-backdrop" id="navBackdrop"></div>
-          <form method="POST" action="${path('/logout')}" style="margin:0"><button class="btn secondary" type="submit">Log out</button></form>
+            <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu">
+              <div class="bars"><i></i><i></i><i></i></div>
+            </button>
+            <form method="POST" action="${path('/logout')}" style="margin:0">
+              <button class="btn secondary" type="submit">Log out</button>
+            </form>
+          </div>
         </div>
         <div class="shell-main">
         ${body}
