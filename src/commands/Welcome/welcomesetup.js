@@ -9,6 +9,7 @@ import {
   ActionRowBuilder,
 } from 'discord.js';
 import { getWelcomeConfig, setInDb } from '../../utils/database.js';
+import { DEFAULT_BANORANT_WELCOME, DEFAULT_BANORANT_GOODBYE } from '../../utils/welcomeTemplates.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -84,18 +85,15 @@ export default {
       .setCustomId(`welcomesetup_modal:${sub}:${channel.id}`)
       .setTitle(isWelcome ? 'Welcome Message' : 'Goodbye Message');
 
-    const defaultWelcome =
-      'Welcome {user} to **{server}**! 🎉\n\nPlease go to #verify and complete verification.\nYou are member #{membercount}.';
-
-    const defaultGoodbye =
-      '**{user}** left **{server}**. 👋\nMembers left: {membercount}';
+    const defaultWelcome = DEFAULT_BANORANT_WELCOME;
+    const defaultGoodbye = DEFAULT_BANORANT_GOODBYE;
 
     const messageInput = new TextInputBuilder()
       .setCustomId('message')
       .setLabel('Message (use Enter for new lines)')
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(true)
-      .setMaxLength(2000)
+      .setMaxLength(4000)
       .setValue(isWelcome ? defaultWelcome : defaultGoodbye)
       .setPlaceholder('Type your message here. Press Enter for a new line.');
 

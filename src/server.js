@@ -1,4 +1,6 @@
 import express from 'express';
+import { getWelcomeConfig, saveWelcomeConfig } from './utils/database.js';
+import { DEFAULT_BANORANT_WELCOME, DEFAULT_BANORANT_GOODBYE } from './utils/welcomeTemplates.js';
 import crypto from 'crypto';
 import { getAiConfig, saveAiConfig } from './services/aiService.js';
 import {
@@ -137,6 +139,7 @@ function layout(title, body, active = '') {
     ['dms', 'DMs', '✉', path('/dashboard/dms')],
     ['polls', 'Polls', '📊', path('/dashboard/polls')],
     ['giveaways', 'Giveaways', '🎁', path('/dashboard/giveaways')],
+    ['welcome', 'Welcome', '👋', path('/dashboard/welcome')],
     ['maintenance', 'Maintenance', '⚙', path('/dashboard/maintenance')],
   ]
     .map(
