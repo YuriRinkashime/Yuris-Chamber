@@ -1853,7 +1853,19 @@ app.post(path('/dashboard/dms/reply'), requireAuth, async (req, res) => {
 });
 
 
-// ——— Welcome / Goodbye (Mongo-backed, multi-guild) ———
+
+// ——— Welcome / Goodbye (Mongo-backed, multi-guild, text|card) ———
+function listTextChannels(guild) {
+  try {
+    return [...guild.channels.cache.values()]
+      .filter((c) => c.isTextBased?.() && c.viewable !== false)
+      .sort((a, b) => (a.rawPosition ?? 0) - (b.rawPosition ?? 0))
+      .map((c) => ({ id: c.id, name: c.name }));
+  } catch (_) {
+    return [];
+  }
+}
+
 app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
   try {
     const token = getCookie(req, 'yuri_dash');
@@ -1870,7 +1882,6 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
       String(req.query.guildId || sess.guildId || process.env.GUILD_ID || '').trim() ||
       (guilds[0] && guilds[0].id) ||
       null;
-
     if (guildId && sess) sess.guildId = guildId;
 
     let cfg = {};
@@ -1880,46 +1891,63 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
       cfg = {};
     }
 
-    const saved = req.query.saved === '1'
-      ? '<p class="ok">Saved to MongoDB for this server.</p>'
-      : '';
-    const err = req.query.err
-      ? `<p class="err">${escapeHtml(String(req.query.err))}</p>`
-      : '';
+    const guild = guildId ? discordClient?.guilds?.cache?.get(guildId) : null;
+    const channels = guild ? listTextChannels(guild) : [];
+    const channelOpts = (selected) =>
+      channels
+        .map(
+          (c) =>
+            `<option value="${escapeHtml(c.id)}"${c.id === selected ? ' selected' : ''}>#${escapeHtml(c.name)}</option>`,
+        )
+        .join('') || '<option value="">No text channels</option>';
 
-    const hasWelcome = Boolean(cfg.enabled && cfg.channelId && (cfg.welcomeMessage || '').trim());
-    const hasGoodbye = Boolean(cfg.goodbyeEnabled && cfg.goodbyeChannelId && (cfg.leaveMessage || '').trim());
-    const welcomeOnly = Boolean(cfg.channelId || (cfg.welcomeMessage || '').trim());
-    const goodbyeOnly = Boolean(cfg.goodbyeChannelId || (cfg.leaveMessage || '').trim());
+    const saved = req.query.saved === '1' ? '<p class="ok">Saved to MongoDB for this server.</p>' : '';
+    const err = req.query.err ? `<p class="err">${escapeHtml(String(req.query.err))}</p>` : '';
+
+    const welcomeReady = Boolean(cfg.enabled && cfg.channelId && (cfg.welcomeMessage || '').trim());
+    const goodbyeReady = Boolean(
+      cfg.goodbyeEnabled && cfg.goodbyeChannelId && (cfg.leaveMessage || '').trim(),
+    );
+    const hasWelcomeSetup = Boolean(cfg.channelId || cfg.enabled || (cfg.welcomeMessage || '').trim());
+    const hasGoodbyeSetup = Boolean(
+      cfg.goodbyeChannelId || cfg.goodbyeEnabled || (cfg.leaveMessage || '').trim(),
+    );
 
     let statusHtml = '';
     if (!guildId) {
-      statusHtml = '<p class="err">No server selected / bot is in no guilds.</p>';
-    } else if (!welcomeOnly && !goodbyeOnly) {
+      statusHtml = '<p class="err">No server selected.</p>';
+    } else if (!hasWelcomeSetup && !hasGoodbyeSetup) {
       statusHtml =
-        '<p class="muted">There\'s no Welcome/Goodbye channel or message configured for this server yet. Load defaults and set channel IDs.</p>';
+        '<p class="muted">There\'s no Welcome/Goodbye channel or message in this server yet. Use <strong>Add Welcome</strong> / <strong>Add Goodbye</strong> below.</p>';
     } else {
       const bits = [];
-      if (hasWelcome) bits.push('<span class="badge badge-on">Welcome ready</span>');
-      else if (welcomeOnly)
-        bits.push('<span class="badge badge-miss">Welcome incomplete (enable + channel + text)</span>');
+      if (welcomeReady) bits.push('<span class="badge badge-on">Welcome ready</span>');
+      else if (hasWelcomeSetup)
+        bits.push('<span class="badge badge-miss">Welcome incomplete</span>');
       else bits.push('<span class="badge badge-off">No welcome</span>');
-      if (hasGoodbye) bits.push('<span class="badge badge-on">Goodbye ready</span>');
-      else if (goodbyeOnly)
+      if (goodbyeReady) bits.push('<span class="badge badge-on">Goodbye ready</span>');
+      else if (hasGoodbyeSetup)
         bits.push('<span class="badge badge-miss">Goodbye incomplete</span>');
       else bits.push('<span class="badge badge-off">No goodbye</span>');
-      statusHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px">${bits.join('')}</div>`;
+      statusHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">${bits.join('')}</div>`;
     }
 
-    const options = guilds
+    const guildOptions = guilds
       .map(
         (g) =>
-          `<option value="${escapeHtml(g.id)}"${g.id === guildId ? ' selected' : ''}>${escapeHtml(g.name)} (${escapeHtml(g.id)})</option>`,
+          `<option value="${escapeHtml(g.id)}"${g.id === guildId ? ' selected' : ''}>${escapeHtml(g.name)}</option>`,
       )
       .join('');
 
     const welcomeMsg = cfg.welcomeMessage || DEFAULT_BANORANT_WELCOME;
     const goodbyeMsg = cfg.leaveMessage || DEFAULT_BANORANT_GOODBYE;
+    const wStyle = (cfg.welcomeStyle || 'text').toLowerCase() === 'embed' ? 'embed' : 'text';
+    const gStyle = (cfg.goodbyeStyle || 'embed').toLowerCase() === 'text' ? 'text' : 'embed';
+
+    const addWelcomeDisabled = hasWelcomeSetup ? 'disabled' : '';
+    const addGoodbyeDisabled = hasGoodbyeSetup ? 'disabled' : '';
+    const addWelcomeClass = hasWelcomeSetup ? 'btn secondary' : 'btn';
+    const addGoodbyeClass = hasGoodbyeSetup ? 'btn secondary' : 'btn';
 
     res.send(
       layout(
@@ -1927,40 +1955,91 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
         `<div class="val-bar"></div>
         <h1>Welcome &amp; Goodbye</h1>
         ${saved}${err}
-        <div class="banner"><div class="cap">Per-server messages<small>Mongo key guild:{id}:welcome · Valorant café theme</small></div></div>
+        <div class="banner"><div class="cap">Per-server · text or card<small>Mongo guild:{id}:welcome</small></div></div>
 
         <div class="card">
           <h2>Select server</h2>
           <form method="get" action="${path('/dashboard/welcome')}">
-            <select class="guild-select" name="guildId" onchange="this.form.submit()">
-              ${options || '<option value=\"\">No servers</option>'}
-            </select>
+            <select class="guild-select" name="guildId" onchange="this.form.submit()">${guildOptions || '<option value="">No servers</option>'}</select>
           </form>
           ${statusHtml}
+        </div>
+
+        <div class="welcome-grid" style="margin-top:14px">
+          <div class="card">
+            <h2>Add Welcome</h2>
+            <p class="muted">Creates a welcome setup with BANORANT default text.</p>
+            <form method="post" action="${path('/dashboard/welcome/add')}">
+              <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
+              <input type="hidden" name="kind" value="welcome"/>
+              <label>Channel</label>
+              <select class="guild-select" name="channelId" ${addWelcomeDisabled} style="margin-bottom:10px">${channelOpts(cfg.channelId || '')}</select>
+              <label>Style</label>
+              <select class="guild-select" name="style" ${addWelcomeDisabled} style="margin-bottom:12px">
+                <option value="text">Text message</option>
+                <option value="embed">Card (embed)</option>
+              </select>
+              <button class="${addWelcomeClass}" type="submit" ${addWelcomeDisabled}>Add Welcome</button>
+              ${hasWelcomeSetup ? '<p class="muted" style="margin-top:8px">Already configured — edit below or clear channel to re-add.</p>' : ''}
+            </form>
+          </div>
+          <div class="card">
+            <h2>Add Goodbye</h2>
+            <p class="muted">Creates a goodbye setup with BANORANT default text.</p>
+            <form method="post" action="${path('/dashboard/welcome/add')}">
+              <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
+              <input type="hidden" name="kind" value="goodbye"/>
+              <label>Channel</label>
+              <select class="guild-select" name="channelId" ${addGoodbyeDisabled} style="margin-bottom:10px">${channelOpts(cfg.goodbyeChannelId || '')}</select>
+              <label>Style</label>
+              <select class="guild-select" name="style" ${addGoodbyeDisabled} style="margin-bottom:12px">
+                <option value="embed" selected>Card (embed)</option>
+                <option value="text">Text message</option>
+              </select>
+              <button class="${addGoodbyeClass}" type="submit" ${addGoodbyeDisabled}>Add Goodbye</button>
+              ${hasGoodbyeSetup ? '<p class="muted" style="margin-top:8px">Already configured — edit below or clear channel to re-add.</p>' : ''}
+            </form>
+          </div>
         </div>
 
         <form method="post" action="${path('/dashboard/welcome')}" class="card" style="margin-top:14px">
           <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
           <div class="welcome-grid">
             <div>
-              <h2>👋 Welcome</h2>
+              <h2>👋 Welcome settings</h2>
               <label class="row" style="gap:8px;align-items:center;margin-bottom:10px">
                 <input type="checkbox" name="enabled" value="1" ${cfg.enabled ? 'checked' : ''}/>
                 <span>Enable welcome</span>
               </label>
-              <label>Channel ID</label>
-              <input name="channelId" value="${escapeHtml(cfg.channelId || '')}" placeholder="#welcome channel ID" style="width:100%;margin-bottom:10px"/>
+              <label>Channel</label>
+              <select class="guild-select" name="channelId" style="width:100%;margin-bottom:10px">
+                <option value="">— none —</option>
+                ${channelOpts(cfg.channelId || '')}
+              </select>
+              <label>Display style</label>
+              <select class="guild-select" name="welcomeStyle" style="width:100%;margin-bottom:10px">
+                <option value="text"${wStyle === 'text' ? ' selected' : ''}>Text message</option>
+                <option value="embed"${wStyle === 'embed' ? ' selected' : ''}>Card (embed)</option>
+              </select>
               <label>Message</label>
               <textarea name="welcomeMessage" rows="14" style="width:100%">${escapeHtml(welcomeMsg)}</textarea>
             </div>
             <div>
-              <h2>👋 Goodbye</h2>
+              <h2>👋 Goodbye settings</h2>
               <label class="row" style="gap:8px;align-items:center;margin-bottom:10px">
                 <input type="checkbox" name="goodbyeEnabled" value="1" ${cfg.goodbyeEnabled ? 'checked' : ''}/>
                 <span>Enable goodbye</span>
               </label>
-              <label>Channel ID</label>
-              <input name="goodbyeChannelId" value="${escapeHtml(cfg.goodbyeChannelId || '')}" placeholder="#goodbye channel ID" style="width:100%;margin-bottom:10px"/>
+              <label>Channel</label>
+              <select class="guild-select" name="goodbyeChannelId" style="width:100%;margin-bottom:10px">
+                <option value="">— none —</option>
+                ${channelOpts(cfg.goodbyeChannelId || '')}
+              </select>
+              <label>Display style</label>
+              <select class="guild-select" name="goodbyeStyle" style="width:100%;margin-bottom:10px">
+                <option value="embed"${gStyle === 'embed' ? ' selected' : ''}>Card (embed)</option>
+                <option value="text"${gStyle === 'text' ? ' selected' : ''}>Text message</option>
+              </select>
               <label>Message</label>
               <textarea name="leaveMessage" rows="14" style="width:100%">${escapeHtml(goodbyeMsg)}</textarea>
             </div>
@@ -1979,6 +2058,71 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
   }
 });
 
+app.post(path('/dashboard/welcome/add'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const token = getCookie(req, 'yuri_dash');
+    const sess = sessions.get(token) || {};
+    const guildId = String(req.body.guildId || sess.guildId || process.env.GUILD_ID || '').trim();
+    const kind = String(req.body.kind || '');
+    const channelId = String(req.body.channelId || '').trim();
+    const style = String(req.body.style || 'text').toLowerCase() === 'embed' ? 'embed' : 'text';
+    if (!guildId) {
+      return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('No server'));
+    }
+    if (!channelId) {
+      return res.redirect(
+        path('/dashboard/welcome') +
+          '?guildId=' +
+          encodeURIComponent(guildId) +
+          '&err=' +
+          encodeURIComponent('Select a channel'),
+      );
+    }
+    if (sess) sess.guildId = guildId;
+    const cur = (await getWelcomeConfig(discordClient, guildId)) || {};
+    const patch = { ...cur };
+    if (kind === 'welcome') {
+      if (cur.channelId || cur.enabled || (cur.welcomeMessage || '').trim()) {
+        return res.redirect(
+          path('/dashboard/welcome') +
+            '?guildId=' +
+            encodeURIComponent(guildId) +
+            '&err=' +
+            encodeURIComponent('Welcome already configured'),
+        );
+      }
+      patch.enabled = true;
+      patch.channelId = channelId;
+      patch.welcomeStyle = style;
+      patch.welcomeMessage = cur.welcomeMessage || DEFAULT_BANORANT_WELCOME;
+    } else if (kind === 'goodbye') {
+      if (cur.goodbyeChannelId || cur.goodbyeEnabled || (cur.leaveMessage || '').trim()) {
+        return res.redirect(
+          path('/dashboard/welcome') +
+            '?guildId=' +
+            encodeURIComponent(guildId) +
+            '&err=' +
+            encodeURIComponent('Goodbye already configured'),
+        );
+      }
+      patch.goodbyeEnabled = true;
+      patch.goodbyeChannelId = channelId;
+      patch.goodbyeStyle = style === 'text' ? 'text' : 'embed';
+      patch.leaveMessage = cur.leaveMessage || DEFAULT_BANORANT_GOODBYE;
+    } else {
+      return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('Unknown kind'));
+    }
+    await saveWelcomeConfig(discordClient, guildId, patch);
+    return res.redirect(
+      path('/dashboard/welcome') + '?saved=1&guildId=' + encodeURIComponent(guildId),
+    );
+  } catch (e) {
+    return res.redirect(
+      path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Add failed'),
+    );
+  }
+});
+
 app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const token = getCookie(req, 'yuri_dash');
@@ -1989,14 +2133,18 @@ app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended:
     }
     if (sess) sess.guildId = guildId;
     const loadDefaults = req.body.loadDefaults === '1';
+    const wStyle = String(req.body.welcomeStyle || 'text').toLowerCase() === 'embed' ? 'embed' : 'text';
+    const gStyle = String(req.body.goodbyeStyle || 'embed').toLowerCase() === 'text' ? 'text' : 'embed';
     const patch = {
       enabled: req.body.enabled === '1',
       channelId: String(req.body.channelId || '').trim() || null,
+      welcomeStyle: wStyle,
       welcomeMessage: loadDefaults
         ? DEFAULT_BANORANT_WELCOME
         : String(req.body.welcomeMessage || '').slice(0, 4000),
       goodbyeEnabled: req.body.goodbyeEnabled === '1',
       goodbyeChannelId: String(req.body.goodbyeChannelId || '').trim() || null,
+      goodbyeStyle: gStyle,
       leaveMessage: loadDefaults
         ? DEFAULT_BANORANT_GOODBYE
         : String(req.body.leaveMessage || '').slice(0, 4000),
@@ -2011,6 +2159,7 @@ app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended:
     );
   }
 });
+
 
 
 export function startServer(client) {

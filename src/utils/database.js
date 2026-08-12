@@ -341,6 +341,8 @@ function normalizeWelcomeConfig(raw = {}) {
         welcomeMessage,
         welcomeEmbed,
         welcomePing: Boolean(base.welcomePing),
+        welcomeStyle: (base.welcomeStyle === 'embed' || base.welcomeStyle === 'card') ? 'embed' : (base.welcomeStyle || 'text'),
+        goodbyeStyle: (base.goodbyeStyle === 'text') ? 'text' : (base.goodbyeStyle || 'embed'),
         welcomeImage: base.welcomeImage ?? null,
         goodbyeEnabled: Boolean(base.goodbyeEnabled),
         goodbyeChannelId,
