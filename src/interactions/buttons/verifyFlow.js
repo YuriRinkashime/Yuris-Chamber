@@ -101,7 +101,7 @@ export default [
         const cfg = await getVerifyConfig(interaction.client, interaction.guildId);
         setPending(interaction, { age: null, gender: null, rank: null });
         await interaction.update({
-          content: '**Step 1/3 — Age**',
+          content: '**Step 1/3 — Age**\n_Only you see this. The channel panel stays for everyone._',
           components: [selectRow('verify_age', 'Select your age...', cfg.ages)],
         });
       } catch (err) {

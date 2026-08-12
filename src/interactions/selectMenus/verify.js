@@ -98,12 +98,15 @@ export default [
         const roleName = map[interaction.values[0]];
         if (!roleName) return safeError(interaction, 'Unknown age option.');
         setPending(interaction, { age: roleName, gender: null, rank: null });
-        await interaction.update({
+
+        // EPHEMERAL — public panel stays for the whole server
+        await interaction.reply({
           content: `✅ Age: **${roleName}**\n\n**Step 2/3 — Gender**`,
           components: [
             selectRow('verify_gender', 'Select your gender...', cfg.genders),
             backButton('verify_back_age'),
           ],
+          flags: MessageFlags.Ephemeral,
         });
       } catch (err) {
         await safeError(interaction, err.message || 'Something went wrong.');
@@ -122,7 +125,7 @@ export default [
         const state = setPending(interaction, { gender: roleName, rank: null });
         if (!state.age) return safeError(interaction, 'Session expired. Use the panel again.');
         await interaction.update({
-          content: `${summary(state)}\n\n**Step 3/3 — Rank / activity**\n_Valorant rank, Unranked, or other games_`,
+          content: `${summary(state)}\n\n**Step 3/3 — Rank / activity**\n_Order: Doesn't Play Valo → Unranked → Iron → … → Radiant_`,
           components: [
             selectRow('verify_rank', 'Rank or activity...', cfg.ranks),
             backButton('verify_back_gender'),

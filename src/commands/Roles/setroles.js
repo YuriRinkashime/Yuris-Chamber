@@ -5,9 +5,10 @@ import {
 } from 'discord.js';
 
 const DEFAULT_RANKS = [
+  "Doesn't Play Valo",
+  'Unranked',
   'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum',
   'Diamond', 'Ascendant', 'Immortal', 'Radiant',
-  'Unranked', "Doesn't Play Valo",
 ];
 
 export default {

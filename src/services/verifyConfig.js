@@ -15,6 +15,14 @@ const DEFAULT_GENDERS = [
 ];
 
 const DEFAULT_RANKS = [
+  {
+    label: "Doesn't Play Valo",
+    value: 'rank_no_valo',
+    roleName: "Doesn't Play Valo",
+    emoji: '🎮',
+    description: 'Here for other games / hangout',
+  },
+  { label: 'Unranked', value: 'rank_unranked', roleName: 'Unranked', emoji: '❔' },
   { label: 'Iron', value: 'rank_iron', roleName: 'Iron', emoji: '⚫' },
   { label: 'Bronze', value: 'rank_bronze', roleName: 'Bronze', emoji: '🟤' },
   { label: 'Silver', value: 'rank_silver', roleName: 'Silver', emoji: '⚪' },
@@ -24,14 +32,6 @@ const DEFAULT_RANKS = [
   { label: 'Ascendant', value: 'rank_ascendant', roleName: 'Ascendant', emoji: '🟢' },
   { label: 'Immortal', value: 'rank_immortal', roleName: 'Immortal', emoji: '🔴' },
   { label: 'Radiant', value: 'rank_radiant', roleName: 'Radiant', emoji: '✨' },
-  { label: 'Unranked', value: 'rank_unranked', roleName: 'Unranked', emoji: '❔' },
-  {
-    label: "Doesn't Play Valo",
-    value: 'rank_no_valo',
-    roleName: "Doesn't Play Valo",
-    emoji: '🎮',
-    description: 'Here for other games / hangout',
-  },
 ];
 
 function key(guildId) {
