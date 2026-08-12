@@ -604,6 +604,92 @@ input[type=checkbox]:not(.plain):checked::after{
 .role-pill{display:inline-block;padding:2px 8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
   border:1px solid rgba(255,70,85,.4);color:#ff8a94;margin-left:8px}
 
+
+/* —— UI polish Aug 2026 —— */
+:root{
+  --val2:#ff6b78; /* was green — unify to red family */
+  --gray:#6b7280;
+  --gray2:#9aa3b2;
+}
+body{
+  background:
+    radial-gradient(ellipse 90% 50% at 50% -10%, rgba(255,70,85,.14), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(255,70,85,.06), transparent 45%),
+    linear-gradient(180deg, #07090d 0%, #0b0e13 40%, #0a0c10 100%) !important;
+}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+  background-image:
+    linear-gradient(rgba(255,70,85,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,70,85,.04) 1px, transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse at center, #000 20%, transparent 75%);
+}
+/* Command rows: red = on, gray = off */
+.cmd-row.on{border-left:3px solid #ff4655 !important}
+.cmd-row.off{border-left:3px solid #4b5563 !important;opacity:.7}
+.switch .slider{background:#4b5563 !important}
+.switch input:checked + .slider{background:#ff4655 !important;box-shadow:0 0 12px rgba(255,70,85,.45)}
+.switch input:not(:checked) + .slider{background:#4b5563 !important}
+.badge.on{background:rgba(255,70,85,.15)!important;color:#ff8a94!important;border-color:rgba(255,70,85,.4)!important}
+.badge.off{background:rgba(75,85,99,.25)!important;color:#9aa3b2!important;border:1px solid rgba(75,85,99,.5)!important}
+h2{color:#ff6b78 !important}
+
+/* Force all selects */
+select{
+  appearance:none!important;-webkit-appearance:none!important;
+  background:#0e1218 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ff4655' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") right 12px center/12px no-repeat !important;
+  border:1px solid rgba(255,70,85,.45)!important;
+  color:#f2f4f8!important;padding:11px 36px 11px 12px!important;
+  clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  border-radius:2px!important;
+  font-family:var(--display),Rajdhani,sans-serif!important;font-weight:600!important;
+}
+select:focus{border-color:#ff4655!important;box-shadow:0 0 0 1px rgba(255,70,85,.35)!important}
+
+/* Hamburger mobile nav */
+.nav-toggle{
+  display:none;width:44px;height:44px;align-items:center;justify-content:center;
+  background:rgba(255,70,85,.12);border:1px solid rgba(255,70,85,.4);color:#fff;cursor:pointer;
+  clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.nav-toggle span{display:block;width:20px;height:2px;background:#fff;margin:3px 0;transition:.2s}
+.nav-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
+body.nav-open .nav-backdrop{display:block}
+.intel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.intel-tile{
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,70,85,.2);padding:12px 14px;
+  clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.intel-tile .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-family:var(--display)}
+.intel-tile .v{font-size:18px;font-weight:700;color:#fff;font-family:var(--display);margin-top:4px}
+.intel-tile .v.accent{color:#ff4655}
+@media (max-width:720px){
+  .nav-toggle{display:inline-flex}
+  .top{
+    flex-direction:row!important;align-items:center!important;justify-content:space-between!important;
+    flex-wrap:nowrap!important;padding:8px 10px!important;
+  }
+  .top .nav{
+    display:none!important;position:fixed;top:56px;left:10px;right:10px;z-index:160;
+    flex-direction:column!important;grid-template-columns:none!important;
+    background:rgba(10,12,16,.98)!important;border:1px solid rgba(255,70,85,.35);
+    padding:10px!important;max-height:70vh;overflow:auto;
+    clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  }
+  body.nav-open .top .nav{display:flex!important}
+  body.nav-open .top .nav .nav-link{
+    display:flex!important;flex-direction:row!important;justify-content:flex-start!important;
+    width:100%;padding:12px 14px!important;font-size:13px!important;min-height:auto;
+  }
+  .top form{width:auto!important}
+  .top .btn{width:auto!important}
+  .shell{padding-top:72px!important}
+  .intel-grid{grid-template-columns:1fr 1fr}
+  .top-brand{flex:1}
+  .top-actions{display:flex;align-items:center;gap:8px}
+}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -620,7 +706,13 @@ ${
             <div class="avatar" style="width:36px;height:36px;font-size:14px">◆</div>
             <div class="brand" style="font-size:16px">Yuri's Chamber<span>BANORANT CAFE</span></div>
           </div>
-          <nav class="nav">${nav}</nav>
+          <div class="top-actions">
+          <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu">
+            <div><span></span><span></span><span></span></div>
+          </button>
+        </div>
+        <nav class="nav" id="mainNav">${nav}</nav>
+        <div class="nav-backdrop" id="navBackdrop"></div>
           <form method="POST" action="${path('/logout')}" style="margin:0"><button class="btn secondary" type="submit">Log out</button></form>
         </div>
         <div class="shell-main">
@@ -640,6 +732,19 @@ ${
         </div>
       </div>`
 }
+<script>
+(function(){
+  var t=document.getElementById('navToggle');
+  var b=document.getElementById('navBackdrop');
+  function close(){document.body.classList.remove('nav-open')}
+  function toggle(){document.body.classList.toggle('nav-open')}
+  if(t) t.addEventListener('click', function(e){e.preventDefault();toggle()});
+  if(b) b.addEventListener('click', close);
+  document.querySelectorAll('#mainNav .nav-link').forEach(function(a){
+    a.addEventListener('click', close);
+  });
+})();
+</script>
 </body>
 </html>`;
 }
@@ -913,13 +1018,16 @@ app.get(path('/dashboard'), requireAuth, async (req, res) => {
         </div>
         <div class="card">
           <h2>Chamber intel</h2>
-          <ul class="intel">
-            <li><span class="dot"></span> Database: <strong>MongoDB</strong> · levels persist across restarts</li>
-            <li><span class="dot"></span> Level profiles in DB: <strong>${levelUsers}</strong></li>
-            <li><span class="dot"></span> Active polls: <strong>${activePolls}</strong></li>
-            <li><span class="dot"></span> Guilds online: <strong id="intel-guilds">—</strong></li>
-            <li><span class="dot"></span> Edit presence below · also /status in Discord</li>
-            <li><span class="dot"></span> Polls & Giveaways tabs manage live events</li>
+          <div class="intel-grid">
+            <div class="intel-tile"><div class="k">Database</div><div class="v accent">MongoDB</div></div>
+            <div class="intel-tile"><div class="k">Level profiles</div><div class="v">${levelUsers}</div></div>
+            <div class="intel-tile"><div class="k">Active polls</div><div class="v" id="intel-polls">${activePolls}</div></div>
+            <div class="intel-tile"><div class="k">Guilds online</div><div class="v" id="intel-guilds">—</div></div>
+          </div>
+          <ul class="intel" style="margin-top:12px">
+            <li><span class="dot"></span> Presence: edit below or <code>/status</code></li>
+            <li><span class="dot"></span> Polls &amp; Giveaways tabs manage live events</li>
+            <li><span class="dot"></span> Levels persist in Mongo across restarts</li>
           </ul>
         </div>
       </div>
@@ -1091,15 +1199,30 @@ app.get(path('/dashboard/maintenance'), requireAuth, async (req, res) => {
       ${saved}
       <div class="card" style="border-color:rgba(255,70,85,.35);box-shadow:0 0 30px rgba(255,70,85,.12)">
         <form method="POST" action="${path('/dashboard/maintenance')}">
-          <label class="row" style="gap:12px;align-items:center;margin-bottom:14px">
-            <input type="checkbox" name="maintenanceMode" value="1" ${on ? 'checked' : ''} style="width:18px;height:18px;accent-color:#ff4655"/>
-            <span style="font-family:var(--display);letter-spacing:.1em;color:#ff4655">MAINTENANCE MODE</span>
-          </label>
+          <input type="hidden" name="maintenanceMode" id="maintVal" value="${on ? '1' : '0'}"/>
+          <label style="margin-bottom:8px">MAINTENANCE MODE</label>
+          <div class="vbtn-row" style="margin-bottom:14px">
+            <button type="button" class="vtoggle ${on ? 'on' : 'off'}" id="maintBtn">${on ? 'ENABLED' : 'DISABLED'}</button>
+          </div>
           <label style="color:var(--muted);font-size:11px;letter-spacing:.12em">MESSAGE TO USERS</label>
           <textarea name="maintenanceMessage" rows="5" style="border-color:rgba(255,70,85,.3)">${escapeHtml(msg || '')}</textarea>
           <p class="muted" style="margin-top:8px">When ON, commands reply with this message. Active polls/giveaways pause entry.</p>
           <button class="btn" type="submit" style="margin-top:12px">SAVE PROTOCOL</button>
         </form>
+        <script>
+        (function(){
+          var btn=document.getElementById('maintBtn');
+          var inp=document.getElementById('maintVal');
+          if(!btn||!inp) return;
+          btn.addEventListener('click', function(){
+            var on = inp.value !== '1';
+            inp.value = on ? '1' : '0';
+            btn.classList.toggle('on', on);
+            btn.classList.toggle('off', !on);
+            btn.textContent = on ? 'ENABLED' : 'DISABLED';
+          });
+        })();
+        </script>
       </div>`,
       'maintenance',
     ),
