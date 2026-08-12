@@ -447,6 +447,25 @@ body.is-login .top,body.is-login .hero{display:none !important}
   .card:first-of-type{margin-top:8px}
 }
 
+
+/* —— Welcome page + stronger Valorant mobile —— */
+.val-bar{height:3px;background:linear-gradient(90deg,#ff4655,transparent 60%);margin:0 0 14px}
+.badge{display:inline-block;padding:3px 8px;border-radius:2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.badge-on{background:rgba(70,200,120,.15);color:#5ddea0;border:1px solid rgba(70,200,120,.35)}
+.badge-off{background:rgba(255,70,85,.12);color:#ff8a94;border:1px solid rgba(255,70,85,.3)}
+.badge-miss{background:rgba(250,166,26,.12);color:#ffc857;border:1px solid rgba(250,166,26,.3)}
+.guild-select{width:100%;max-width:420px;background:#12161e;border:1px solid rgba(255,70,85,.35);color:#fff;padding:10px 12px;border-radius:4px;font-family:inherit}
+.welcome-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:720px){
+  .welcome-grid{grid-template-columns:1fr}
+  .nav{grid-template-columns:repeat(4,minmax(0,1fr)) !important}
+  textarea{min-height:160px;font-size:16px} /* prevent iOS zoom */
+  input,select,.guild-select{font-size:16px}
+  .top{position:fixed !important;top:0;left:0;right:0;z-index:200;background:rgba(11,14,19,.96);backdrop-filter:blur(10px)}
+  .shell{padding-top:150px !important}
+}
+.preview-box{background:rgba(0,0,0,.35);border-left:3px solid #ff4655;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:220px;overflow:auto;border-radius:0 4px 4px 0}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
@@ -1400,7 +1419,26 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
         .poll-bar{height:6px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:4px;overflow:hidden}
         .poll-bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--val),var(--val2));border-radius:3px}
         .poll-edit input,.poll-edit textarea{width:100%;box-sizing:border-box;margin-top:4px}
-      </style>
+      
+/* —— Welcome page + stronger Valorant mobile —— */
+.val-bar{height:3px;background:linear-gradient(90deg,#ff4655,transparent 60%);margin:0 0 14px}
+.badge{display:inline-block;padding:3px 8px;border-radius:2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.badge-on{background:rgba(70,200,120,.15);color:#5ddea0;border:1px solid rgba(70,200,120,.35)}
+.badge-off{background:rgba(255,70,85,.12);color:#ff8a94;border:1px solid rgba(255,70,85,.3)}
+.badge-miss{background:rgba(250,166,26,.12);color:#ffc857;border:1px solid rgba(250,166,26,.3)}
+.guild-select{width:100%;max-width:420px;background:#12161e;border:1px solid rgba(255,70,85,.35);color:#fff;padding:10px 12px;border-radius:4px;font-family:inherit}
+.welcome-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:720px){
+  .welcome-grid{grid-template-columns:1fr}
+  .nav{grid-template-columns:repeat(4,minmax(0,1fr)) !important}
+  textarea{min-height:160px;font-size:16px} /* prevent iOS zoom */
+  input,select,.guild-select{font-size:16px}
+  .top{position:fixed !important;top:0;left:0;right:0;z-index:200;background:rgba(11,14,19,.96);backdrop-filter:blur(10px)}
+  .shell{padding-top:150px !important}
+}
+.preview-box{background:rgba(0,0,0,.35);border-left:3px solid #ff4655;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:220px;overflow:auto;border-radius:0 4px 4px 0}
+
+</style>
       <script>
       (function(){
         var delUrl = ${JSON.stringify(path('/dashboard/polls/delete'))};
@@ -1614,7 +1652,26 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
         .bubble.ai{align-self:flex-end;background:rgba(15,221,163,.14);border:1px solid rgba(15,221,163,.4)}
         .bubble .who{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
         .dm-actions textarea{min-height:80px;width:100%;box-sizing:border-box;border-radius:8px}
-      </style>
+      
+/* —— Welcome page + stronger Valorant mobile —— */
+.val-bar{height:3px;background:linear-gradient(90deg,#ff4655,transparent 60%);margin:0 0 14px}
+.badge{display:inline-block;padding:3px 8px;border-radius:2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.badge-on{background:rgba(70,200,120,.15);color:#5ddea0;border:1px solid rgba(70,200,120,.35)}
+.badge-off{background:rgba(255,70,85,.12);color:#ff8a94;border:1px solid rgba(255,70,85,.3)}
+.badge-miss{background:rgba(250,166,26,.12);color:#ffc857;border:1px solid rgba(250,166,26,.3)}
+.guild-select{width:100%;max-width:420px;background:#12161e;border:1px solid rgba(255,70,85,.35);color:#fff;padding:10px 12px;border-radius:4px;font-family:inherit}
+.welcome-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:720px){
+  .welcome-grid{grid-template-columns:1fr}
+  .nav{grid-template-columns:repeat(4,minmax(0,1fr)) !important}
+  textarea{min-height:160px;font-size:16px} /* prevent iOS zoom */
+  input,select,.guild-select{font-size:16px}
+  .top{position:fixed !important;top:0;left:0;right:0;z-index:200;background:rgba(11,14,19,.96);backdrop-filter:blur(10px)}
+  .shell{padding-top:150px !important}
+}
+.preview-box{background:rgba(0,0,0,.35);border-left:3px solid #ff4655;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:220px;overflow:auto;border-radius:0 4px 4px 0}
+
+</style>
       <script>
       (function(){
         const api = ${JSON.stringify(path('/api/dms'))};
@@ -1794,6 +1851,167 @@ app.post(path('/dashboard/dms/reply'), requireAuth, async (req, res) => {
     res.redirect(path('/dashboard/dms') + `?err=${encodeURIComponent(e.message)}`);
   }
 });
+
+
+// ——— Welcome / Goodbye (Mongo-backed, multi-guild) ———
+app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
+  try {
+    const token = getCookie(req, 'yuri_dash');
+    const sess = sessions.get(token) || {};
+    const guilds = [];
+    try {
+      for (const g of discordClient?.guilds?.cache?.values?.() || []) {
+        guilds.push({ id: g.id, name: g.name });
+      }
+    } catch (_) {}
+    guilds.sort((a, b) => a.name.localeCompare(b.name));
+
+    const guildId =
+      String(req.query.guildId || sess.guildId || process.env.GUILD_ID || '').trim() ||
+      (guilds[0] && guilds[0].id) ||
+      null;
+
+    if (guildId && sess) sess.guildId = guildId;
+
+    let cfg = {};
+    try {
+      if (guildId) cfg = (await getWelcomeConfig(discordClient, guildId)) || {};
+    } catch (_) {
+      cfg = {};
+    }
+
+    const saved = req.query.saved === '1'
+      ? '<p class="ok">Saved to MongoDB for this server.</p>'
+      : '';
+    const err = req.query.err
+      ? `<p class="err">${escapeHtml(String(req.query.err))}</p>`
+      : '';
+
+    const hasWelcome = Boolean(cfg.enabled && cfg.channelId && (cfg.welcomeMessage || '').trim());
+    const hasGoodbye = Boolean(cfg.goodbyeEnabled && cfg.goodbyeChannelId && (cfg.leaveMessage || '').trim());
+    const welcomeOnly = Boolean(cfg.channelId || (cfg.welcomeMessage || '').trim());
+    const goodbyeOnly = Boolean(cfg.goodbyeChannelId || (cfg.leaveMessage || '').trim());
+
+    let statusHtml = '';
+    if (!guildId) {
+      statusHtml = '<p class="err">No server selected / bot is in no guilds.</p>';
+    } else if (!welcomeOnly && !goodbyeOnly) {
+      statusHtml =
+        '<p class="muted">There\'s no Welcome/Goodbye channel or message configured for this server yet. Load defaults and set channel IDs.</p>';
+    } else {
+      const bits = [];
+      if (hasWelcome) bits.push('<span class="badge badge-on">Welcome ready</span>');
+      else if (welcomeOnly)
+        bits.push('<span class="badge badge-miss">Welcome incomplete (enable + channel + text)</span>');
+      else bits.push('<span class="badge badge-off">No welcome</span>');
+      if (hasGoodbye) bits.push('<span class="badge badge-on">Goodbye ready</span>');
+      else if (goodbyeOnly)
+        bits.push('<span class="badge badge-miss">Goodbye incomplete</span>');
+      else bits.push('<span class="badge badge-off">No goodbye</span>');
+      statusHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px">${bits.join('')}</div>`;
+    }
+
+    const options = guilds
+      .map(
+        (g) =>
+          `<option value="${escapeHtml(g.id)}"${g.id === guildId ? ' selected' : ''}>${escapeHtml(g.name)} (${escapeHtml(g.id)})</option>`,
+      )
+      .join('');
+
+    const welcomeMsg = cfg.welcomeMessage || DEFAULT_BANORANT_WELCOME;
+    const goodbyeMsg = cfg.leaveMessage || DEFAULT_BANORANT_GOODBYE;
+
+    res.send(
+      layout(
+        'Welcome / Goodbye',
+        `<div class="val-bar"></div>
+        <h1>Welcome &amp; Goodbye</h1>
+        ${saved}${err}
+        <div class="banner"><div class="cap">Per-server messages<small>Mongo key guild:{id}:welcome · Valorant café theme</small></div></div>
+
+        <div class="card">
+          <h2>Select server</h2>
+          <form method="get" action="${path('/dashboard/welcome')}">
+            <select class="guild-select" name="guildId" onchange="this.form.submit()">
+              ${options || '<option value=\"\">No servers</option>'}
+            </select>
+          </form>
+          ${statusHtml}
+        </div>
+
+        <form method="post" action="${path('/dashboard/welcome')}" class="card" style="margin-top:14px">
+          <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
+          <div class="welcome-grid">
+            <div>
+              <h2>👋 Welcome</h2>
+              <label class="row" style="gap:8px;align-items:center;margin-bottom:10px">
+                <input type="checkbox" name="enabled" value="1" ${cfg.enabled ? 'checked' : ''}/>
+                <span>Enable welcome</span>
+              </label>
+              <label>Channel ID</label>
+              <input name="channelId" value="${escapeHtml(cfg.channelId || '')}" placeholder="#welcome channel ID" style="width:100%;margin-bottom:10px"/>
+              <label>Message</label>
+              <textarea name="welcomeMessage" rows="14" style="width:100%">${escapeHtml(welcomeMsg)}</textarea>
+            </div>
+            <div>
+              <h2>👋 Goodbye</h2>
+              <label class="row" style="gap:8px;align-items:center;margin-bottom:10px">
+                <input type="checkbox" name="goodbyeEnabled" value="1" ${cfg.goodbyeEnabled ? 'checked' : ''}/>
+                <span>Enable goodbye</span>
+              </label>
+              <label>Channel ID</label>
+              <input name="goodbyeChannelId" value="${escapeHtml(cfg.goodbyeChannelId || '')}" placeholder="#goodbye channel ID" style="width:100%;margin-bottom:10px"/>
+              <label>Message</label>
+              <textarea name="leaveMessage" rows="14" style="width:100%">${escapeHtml(goodbyeMsg)}</textarea>
+            </div>
+          </div>
+          <p class="muted" style="margin-top:10px">Tokens: <code>{user}</code> <code>{user.tag}</code> <code>{username}</code> <code>{server}</code> <code>{membercount}</code></p>
+          <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn" type="submit">Save to MongoDB</button>
+            <button class="btn secondary" type="submit" name="loadDefaults" value="1">Load BANORANT defaults</button>
+          </div>
+        </form>`,
+        'welcome',
+      ),
+    );
+  } catch (e) {
+    res.status(500).send('Welcome page error: ' + (e.message || e));
+  }
+});
+
+app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const token = getCookie(req, 'yuri_dash');
+    const sess = sessions.get(token) || {};
+    const guildId = String(req.body.guildId || sess.guildId || process.env.GUILD_ID || '').trim();
+    if (!guildId) {
+      return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('No server selected'));
+    }
+    if (sess) sess.guildId = guildId;
+    const loadDefaults = req.body.loadDefaults === '1';
+    const patch = {
+      enabled: req.body.enabled === '1',
+      channelId: String(req.body.channelId || '').trim() || null,
+      welcomeMessage: loadDefaults
+        ? DEFAULT_BANORANT_WELCOME
+        : String(req.body.welcomeMessage || '').slice(0, 4000),
+      goodbyeEnabled: req.body.goodbyeEnabled === '1',
+      goodbyeChannelId: String(req.body.goodbyeChannelId || '').trim() || null,
+      leaveMessage: loadDefaults
+        ? DEFAULT_BANORANT_GOODBYE
+        : String(req.body.leaveMessage || '').slice(0, 4000),
+    };
+    await saveWelcomeConfig(discordClient, guildId, patch);
+    return res.redirect(
+      path('/dashboard/welcome') + '?saved=1&guildId=' + encodeURIComponent(guildId),
+    );
+  } catch (e) {
+    return res.redirect(
+      path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Save failed'),
+    );
+  }
+});
+
 
 export function startServer(client) {
   discordClient = client || null;
