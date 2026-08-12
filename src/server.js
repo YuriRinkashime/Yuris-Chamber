@@ -437,7 +437,7 @@ body.is-login .top,body.is-login .hero{display:none !important}
 .shell-main{padding-top:8px;max-width:1100px;margin:0 auto}
 .shell{padding-top:78px !important}
 @media (max-width:720px){
-  .shell{padding-top:150px !important}
+  .shell{padding-top:168px !important}
   .shell-main{padding-top:12px}
   .top-brand .brand{font-size:14px}
   .top{flex-direction:column;align-items:stretch}
@@ -462,9 +462,48 @@ body.is-login .top,body.is-login .hero{display:none !important}
   textarea{min-height:160px;font-size:16px} /* prevent iOS zoom */
   input,select,.guild-select{font-size:16px}
   .top{position:fixed !important;top:0;left:0;right:0;z-index:200;background:rgba(11,14,19,.96);backdrop-filter:blur(10px)}
-  .shell{padding-top:150px !important}
+  .shell{padding-top:168px !important}
 }
 .preview-box{background:rgba(0,0,0,.35);border-left:3px solid #ff4655;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:220px;overflow:auto;border-radius:0 4px 4px 0}
+
+
+/* Welcome page V2 */
+.vselect{
+  appearance:none;-webkit-appearance:none;
+  width:100%;max-width:100%;
+  background:#0e1218 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ff4655' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") right 12px center/12px no-repeat;
+  border:1px solid rgba(255,70,85,.45);
+  color:#f2f4f8;padding:11px 36px 11px 12px;border-radius:2px;
+  font-family:var(--display),Rajdhani,sans-serif;font-weight:600;letter-spacing:.04em;
+  clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.vselect:focus{outline:none;border-color:#ff4655;box-shadow:0 0 0 1px rgba(255,70,85,.35)}
+.vselect:disabled{opacity:.45;cursor:not-allowed}
+.vbtn-row{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.vtoggle{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-width:120px;padding:10px 16px;cursor:pointer;border:none;
+  font-family:var(--display),Rajdhani,sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px;
+  clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.vtoggle.on{background:#ff4655;color:#fff;box-shadow:0 0 16px rgba(255,70,85,.35)}
+.vtoggle.off{background:rgba(255,255,255,.06);color:#9aa3b2;border:1px solid rgba(255,255,255,.12)}
+.vtoggle:disabled{opacity:.4;cursor:not-allowed}
+.btn-danger{
+  background:transparent;color:#ff8a94;border:1px solid rgba(255,70,85,.5);
+  padding:10px 14px;font-family:var(--display),Rajdhani,sans-serif;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:12px;cursor:pointer;
+  clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.btn-danger:hover{background:rgba(255,70,85,.15);color:#fff}
+.btn-danger:disabled{opacity:.4;cursor:not-allowed}
+.section-title{font-family:var(--display),Rajdhani,sans-serif;font-size:22px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 14px;padding-top:4px}
+.welcome-page .card h2{border:none}
+@media (max-width:720px){
+  .shell{padding-top:168px !important}
+  .section-title{padding-top:8px;font-size:20px}
+  .welcome-page h1,.welcome-page .section-title{scroll-margin-top:160px}
+  .vtoggle{flex:1;min-width:140px}
+}
 
 </style>
 </head>
@@ -1434,7 +1473,7 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
   textarea{min-height:160px;font-size:16px} /* prevent iOS zoom */
   input,select,.guild-select{font-size:16px}
   .top{position:fixed !important;top:0;left:0;right:0;z-index:200;background:rgba(11,14,19,.96);backdrop-filter:blur(10px)}
-  .shell{padding-top:150px !important}
+  .shell{padding-top:168px !important}
 }
 .preview-box{background:rgba(0,0,0,.35);border-left:3px solid #ff4655;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:220px;overflow:auto;border-radius:0 4px 4px 0}
 
@@ -1667,7 +1706,7 @@ app.get(path('/dashboard/dms'), requireAuth, async (req, res) => {
   textarea{min-height:160px;font-size:16px} /* prevent iOS zoom */
   input,select,.guild-select{font-size:16px}
   .top{position:fixed !important;top:0;left:0;right:0;z-index:200;background:rgba(11,14,19,.96);backdrop-filter:blur(10px)}
-  .shell{padding-top:150px !important}
+  .shell{padding-top:168px !important}
 }
 .preview-box{background:rgba(0,0,0,.35);border-left:3px solid #ff4655;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:220px;overflow:auto;border-radius:0 4px 4px 0}
 
@@ -1854,16 +1893,29 @@ app.post(path('/dashboard/dms/reply'), requireAuth, async (req, res) => {
 
 
 
-// ——— Welcome / Goodbye (Mongo-backed, multi-guild, text|card) ———
+
+// ——— Welcome / Goodbye V2 ———
 function listTextChannels(guild) {
   try {
     return [...guild.channels.cache.values()]
-      .filter((c) => c.isTextBased?.() && c.viewable !== false)
+      .filter((c) => c.isTextBased?.() && !c.isThread?.())
       .sort((a, b) => (a.rawPosition ?? 0) - (b.rawPosition ?? 0))
       .map((c) => ({ id: c.id, name: c.name }));
   } catch (_) {
     return [];
   }
+}
+
+function channelSelectHtml(channels, selected, { allowEmpty = true, disabled = false } = {}) {
+  const empty = allowEmpty ? '<option value="">— none —</option>' : '';
+  const opts =
+    channels
+      .map(
+        (c) =>
+          `<option value="${escapeHtml(c.id)}"${c.id === selected ? ' selected' : ''}>#${escapeHtml(c.name)}</option>`,
+      )
+      .join('') || '<option value="">No text channels</option>';
+  return `<select class="vselect" name="channelId" ${disabled ? 'disabled' : ''}>${empty}${opts}</select>`;
 }
 
 app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
@@ -1893,15 +1945,11 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
 
     const guild = guildId ? discordClient?.guilds?.cache?.get(guildId) : null;
     const channels = guild ? listTextChannels(guild) : [];
-    const channelOpts = (selected) =>
-      channels
-        .map(
-          (c) =>
-            `<option value="${escapeHtml(c.id)}"${c.id === selected ? ' selected' : ''}>#${escapeHtml(c.name)}</option>`,
-        )
-        .join('') || '<option value="">No text channels</option>';
 
-    const saved = req.query.saved === '1' ? '<p class="ok">Saved to MongoDB for this server.</p>' : '';
+    const saved = req.query.saved === '1' ? '<p class="ok">Saved to MongoDB.</p>' : '';
+    const deleted = req.query.deleted
+      ? `<p class="ok">Deleted ${escapeHtml(String(req.query.deleted))} setup.</p>`
+      : '';
     const err = req.query.err ? `<p class="err">${escapeHtml(String(req.query.err))}</p>` : '';
 
     const welcomeReady = Boolean(cfg.enabled && cfg.channelId && (cfg.welcomeMessage || '').trim());
@@ -1914,21 +1962,26 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
     );
 
     let statusHtml = '';
-    if (!guildId) {
-      statusHtml = '<p class="err">No server selected.</p>';
-    } else if (!hasWelcomeSetup && !hasGoodbyeSetup) {
+    if (!guildId) statusHtml = '<p class="err">No server selected.</p>';
+    else if (!hasWelcomeSetup && !hasGoodbyeSetup) {
       statusHtml =
-        '<p class="muted">There\'s no Welcome/Goodbye channel or message in this server yet. Use <strong>Add Welcome</strong> / <strong>Add Goodbye</strong> below.</p>';
+        '<p class="muted">No Welcome/Goodbye configured yet. Use the Add buttons.</p>';
     } else {
       const bits = [];
-      if (welcomeReady) bits.push('<span class="badge badge-on">Welcome ready</span>');
-      else if (hasWelcomeSetup)
-        bits.push('<span class="badge badge-miss">Welcome incomplete</span>');
-      else bits.push('<span class="badge badge-off">No welcome</span>');
-      if (goodbyeReady) bits.push('<span class="badge badge-on">Goodbye ready</span>');
-      else if (hasGoodbyeSetup)
-        bits.push('<span class="badge badge-miss">Goodbye incomplete</span>');
-      else bits.push('<span class="badge badge-off">No goodbye</span>');
+      bits.push(
+        welcomeReady
+          ? '<span class="badge badge-on">Welcome ready</span>'
+          : hasWelcomeSetup
+            ? '<span class="badge badge-miss">Welcome incomplete</span>'
+            : '<span class="badge badge-off">No welcome</span>',
+      );
+      bits.push(
+        goodbyeReady
+          ? '<span class="badge badge-on">Goodbye ready</span>'
+          : hasGoodbyeSetup
+            ? '<span class="badge badge-miss">Goodbye incomplete</span>'
+            : '<span class="badge badge-off">No goodbye</span>',
+      );
       statusHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">${bits.join('')}</div>`;
     }
 
@@ -1944,23 +1997,26 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
     const wStyle = (cfg.welcomeStyle || 'text').toLowerCase() === 'embed' ? 'embed' : 'text';
     const gStyle = (cfg.goodbyeStyle || 'embed').toLowerCase() === 'text' ? 'text' : 'embed';
 
-    const addWelcomeDisabled = hasWelcomeSetup ? 'disabled' : '';
-    const addGoodbyeDisabled = hasGoodbyeSetup ? 'disabled' : '';
-    const addWelcomeClass = hasWelcomeSetup ? 'btn secondary' : 'btn';
-    const addGoodbyeClass = hasGoodbyeSetup ? 'btn secondary' : 'btn';
+    const chOpts = (selected) =>
+      channels
+        .map(
+          (c) =>
+            `<option value="${escapeHtml(c.id)}"${c.id === selected ? ' selected' : ''}>#${escapeHtml(c.name)}</option>`,
+        )
+        .join('') || '<option value="">No text channels</option>';
 
     res.send(
       layout(
         'Welcome / Goodbye',
-        `<div class="val-bar"></div>
-        <h1>Welcome &amp; Goodbye</h1>
-        ${saved}${err}
-        <div class="banner"><div class="cap">Per-server · text or card<small>Mongo guild:{id}:welcome</small></div></div>
+        `<div class="welcome-page">
+        <h1 class="section-title">Welcome &amp; Goodbye</h1>
+        ${saved}${deleted}${err}
+        <div class="banner"><div class="cap">Per-server messages<small>Text or card · Mongo guild:{id}:welcome</small></div></div>
 
         <div class="card">
           <h2>Select server</h2>
           <form method="get" action="${path('/dashboard/welcome')}">
-            <select class="guild-select" name="guildId" onchange="this.form.submit()">${guildOptions || '<option value="">No servers</option>'}</select>
+            <select class="vselect" name="guildId" onchange="this.form.submit()">${guildOptions || '<option value="">No servers</option>'}</select>
           </form>
           ${statusHtml}
         </div>
@@ -1968,36 +2024,34 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
         <div class="welcome-grid" style="margin-top:14px">
           <div class="card">
             <h2>Add Welcome</h2>
-            <p class="muted">Creates a welcome setup with BANORANT default text.</p>
+            <p class="muted">Quick-create with BANORANT default text.</p>
             <form method="post" action="${path('/dashboard/welcome/add')}">
               <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
               <input type="hidden" name="kind" value="welcome"/>
               <label>Channel</label>
-              <select class="guild-select" name="channelId" ${addWelcomeDisabled} style="margin-bottom:10px">${channelOpts(cfg.channelId || '')}</select>
+              <select class="vselect" name="channelId" ${hasWelcomeSetup ? 'disabled' : ''} style="margin-bottom:10px">${chOpts(cfg.channelId || '')}</select>
               <label>Style</label>
-              <select class="guild-select" name="style" ${addWelcomeDisabled} style="margin-bottom:12px">
+              <select class="vselect" name="style" ${hasWelcomeSetup ? 'disabled' : ''} style="margin-bottom:12px">
                 <option value="text">Text message</option>
                 <option value="embed">Card (embed)</option>
               </select>
-              <button class="${addWelcomeClass}" type="submit" ${addWelcomeDisabled}>Add Welcome</button>
-              ${hasWelcomeSetup ? '<p class="muted" style="margin-top:8px">Already configured — edit below or clear channel to re-add.</p>' : ''}
+              <button class="btn${hasWelcomeSetup ? ' secondary' : ''}" type="submit" ${hasWelcomeSetup ? 'disabled' : ''}>Add Welcome</button>
             </form>
           </div>
           <div class="card">
             <h2>Add Goodbye</h2>
-            <p class="muted">Creates a goodbye setup with BANORANT default text.</p>
+            <p class="muted">Quick-create with BANORANT default text.</p>
             <form method="post" action="${path('/dashboard/welcome/add')}">
               <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
               <input type="hidden" name="kind" value="goodbye"/>
               <label>Channel</label>
-              <select class="guild-select" name="channelId" ${addGoodbyeDisabled} style="margin-bottom:10px">${channelOpts(cfg.goodbyeChannelId || '')}</select>
+              <select class="vselect" name="channelId" ${hasGoodbyeSetup ? 'disabled' : ''} style="margin-bottom:10px">${chOpts(cfg.goodbyeChannelId || '')}</select>
               <label>Style</label>
-              <select class="guild-select" name="style" ${addGoodbyeDisabled} style="margin-bottom:12px">
+              <select class="vselect" name="style" ${hasGoodbyeSetup ? 'disabled' : ''} style="margin-bottom:12px">
                 <option value="embed" selected>Card (embed)</option>
                 <option value="text">Text message</option>
               </select>
-              <button class="${addGoodbyeClass}" type="submit" ${addGoodbyeDisabled}>Add Goodbye</button>
-              ${hasGoodbyeSetup ? '<p class="muted" style="margin-top:8px">Already configured — edit below or clear channel to re-add.</p>' : ''}
+              <button class="btn${hasGoodbyeSetup ? ' secondary' : ''}" type="submit" ${hasGoodbyeSetup ? 'disabled' : ''}>Add Goodbye</button>
             </form>
           </div>
         </div>
@@ -2006,42 +2060,52 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
           <input type="hidden" name="guildId" value="${escapeHtml(guildId || '')}"/>
           <div class="welcome-grid">
             <div>
-              <h2>👋 Welcome settings</h2>
-              <label class="row" style="gap:8px;align-items:center;margin-bottom:10px">
-                <input type="checkbox" name="enabled" value="1" ${cfg.enabled ? 'checked' : ''}/>
-                <span>Enable welcome</span>
-              </label>
+              <h2>Welcome settings</h2>
+              <input type="hidden" name="enabled" id="enabledVal" value="${cfg.enabled ? '1' : '0'}"/>
+              <div class="vbtn-row">
+                <button type="button" class="vtoggle ${cfg.enabled ? 'on' : 'off'}" data-toggle="enabledVal" data-on="Enable" data-off="Disabled">
+                  ${cfg.enabled ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
               <label>Channel</label>
-              <select class="guild-select" name="channelId" style="width:100%;margin-bottom:10px">
-                <option value="">— none —</option>
-                ${channelOpts(cfg.channelId || '')}
+              <select class="vselect" name="channelId" style="margin-bottom:10px">
+                <option value="">— none —</option>${chOpts(cfg.channelId || '')}
               </select>
               <label>Display style</label>
-              <select class="guild-select" name="welcomeStyle" style="width:100%;margin-bottom:10px">
-                <option value="text"${wStyle === 'text' ? ' selected' : ''}>Text message</option>
-                <option value="embed"${wStyle === 'embed' ? ' selected' : ''}>Card (embed)</option>
-              </select>
+              <input type="hidden" name="welcomeStyle" id="wStyleVal" value="${wStyle}"/>
+              <div class="vbtn-row">
+                <button type="button" class="vtoggle ${wStyle === 'text' ? 'on' : 'off'}" data-style="wStyleVal" data-value="text">Text</button>
+                <button type="button" class="vtoggle ${wStyle === 'embed' ? 'on' : 'off'}" data-style="wStyleVal" data-value="embed">Card</button>
+              </div>
               <label>Message</label>
-              <textarea name="welcomeMessage" rows="14" style="width:100%">${escapeHtml(welcomeMsg)}</textarea>
+              <textarea name="welcomeMessage" rows="12" style="width:100%">${escapeHtml(welcomeMsg)}</textarea>
+              <div style="margin-top:12px">
+                <button formaction="${path('/dashboard/welcome/delete')}" formmethod="post" name="kind" value="welcome" class="btn-danger" ${hasWelcomeSetup ? '' : 'disabled'} onclick="return confirm('Delete welcome setup for this server?')">Delete Welcome</button>
+              </div>
             </div>
             <div>
-              <h2>👋 Goodbye settings</h2>
-              <label class="row" style="gap:8px;align-items:center;margin-bottom:10px">
-                <input type="checkbox" name="goodbyeEnabled" value="1" ${cfg.goodbyeEnabled ? 'checked' : ''}/>
-                <span>Enable goodbye</span>
-              </label>
+              <h2>Goodbye settings</h2>
+              <input type="hidden" name="goodbyeEnabled" id="goodbyeVal" value="${cfg.goodbyeEnabled ? '1' : '0'}"/>
+              <div class="vbtn-row">
+                <button type="button" class="vtoggle ${cfg.goodbyeEnabled ? 'on' : 'off'}" data-toggle="goodbyeVal" data-on="Enable" data-off="Disabled">
+                  ${cfg.goodbyeEnabled ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
               <label>Channel</label>
-              <select class="guild-select" name="goodbyeChannelId" style="width:100%;margin-bottom:10px">
-                <option value="">— none —</option>
-                ${channelOpts(cfg.goodbyeChannelId || '')}
+              <select class="vselect" name="goodbyeChannelId" style="margin-bottom:10px">
+                <option value="">— none —</option>${chOpts(cfg.goodbyeChannelId || '')}
               </select>
               <label>Display style</label>
-              <select class="guild-select" name="goodbyeStyle" style="width:100%;margin-bottom:10px">
-                <option value="embed"${gStyle === 'embed' ? ' selected' : ''}>Card (embed)</option>
-                <option value="text"${gStyle === 'text' ? ' selected' : ''}>Text message</option>
-              </select>
+              <input type="hidden" name="goodbyeStyle" id="gStyleVal" value="${gStyle}"/>
+              <div class="vbtn-row">
+                <button type="button" class="vtoggle ${gStyle === 'text' ? 'on' : 'off'}" data-style="gStyleVal" data-value="text">Text</button>
+                <button type="button" class="vtoggle ${gStyle === 'embed' ? 'on' : 'off'}" data-style="gStyleVal" data-value="embed">Card</button>
+              </div>
               <label>Message</label>
-              <textarea name="leaveMessage" rows="14" style="width:100%">${escapeHtml(goodbyeMsg)}</textarea>
+              <textarea name="leaveMessage" rows="12" style="width:100%">${escapeHtml(goodbyeMsg)}</textarea>
+              <div style="margin-top:12px">
+                <button formaction="${path('/dashboard/welcome/delete')}" formmethod="post" name="kind" value="goodbye" class="btn-danger" ${hasGoodbyeSetup ? '' : 'disabled'} onclick="return confirm('Delete goodbye setup for this server?')">Delete Goodbye</button>
+              </div>
             </div>
           </div>
           <p class="muted" style="margin-top:10px">Tokens: <code>{user}</code> <code>{user.tag}</code> <code>{username}</code> <code>{server}</code> <code>{membercount}</code></p>
@@ -2049,7 +2113,38 @@ app.get(path('/dashboard/welcome'), requireAuth, async (req, res) => {
             <button class="btn" type="submit">Save to MongoDB</button>
             <button class="btn secondary" type="submit" name="loadDefaults" value="1">Load BANORANT defaults</button>
           </div>
-        </form>`,
+        </form>
+        </div>
+        <script>
+        (function(){
+          document.querySelectorAll('[data-toggle]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var id = btn.getAttribute('data-toggle');
+              var inp = document.getElementById(id);
+              if(!inp) return;
+              var on = inp.value !== '1';
+              inp.value = on ? '1' : '0';
+              btn.classList.toggle('on', on);
+              btn.classList.toggle('off', !on);
+              btn.textContent = on ? 'Enabled' : 'Disabled';
+            });
+          });
+          document.querySelectorAll('[data-style]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var id = btn.getAttribute('data-style');
+              var val = btn.getAttribute('data-value');
+              var inp = document.getElementById(id);
+              if(!inp) return;
+              inp.value = val;
+              btn.parentElement.querySelectorAll('[data-style]').forEach(function(b){
+                var active = b.getAttribute('data-value') === val;
+                b.classList.toggle('on', active);
+                b.classList.toggle('off', !active);
+              });
+            });
+          });
+        })();
+        </script>`,
         'welcome',
       ),
     );
@@ -2066,10 +2161,8 @@ app.post(path('/dashboard/welcome/add'), requireAuth, express.urlencoded({ exten
     const kind = String(req.body.kind || '');
     const channelId = String(req.body.channelId || '').trim();
     const style = String(req.body.style || 'text').toLowerCase() === 'embed' ? 'embed' : 'text';
-    if (!guildId) {
-      return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('No server'));
-    }
-    if (!channelId) {
+    if (!guildId) return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('No server'));
+    if (!channelId)
       return res.redirect(
         path('/dashboard/welcome') +
           '?guildId=' +
@@ -2077,7 +2170,6 @@ app.post(path('/dashboard/welcome/add'), requireAuth, express.urlencoded({ exten
           '&err=' +
           encodeURIComponent('Select a channel'),
       );
-    }
     if (sess) sess.guildId = guildId;
     const cur = (await getWelcomeConfig(discordClient, guildId)) || {};
     const patch = { ...cur };
@@ -2113,13 +2205,44 @@ app.post(path('/dashboard/welcome/add'), requireAuth, express.urlencoded({ exten
       return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('Unknown kind'));
     }
     await saveWelcomeConfig(discordClient, guildId, patch);
+    return res.redirect(path('/dashboard/welcome') + '?saved=1&guildId=' + encodeURIComponent(guildId));
+  } catch (e) {
+    return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Add failed'));
+  }
+});
+
+app.post(path('/dashboard/welcome/delete'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const token = getCookie(req, 'yuri_dash');
+    const sess = sessions.get(token) || {};
+    const guildId = String(req.body.guildId || sess.guildId || process.env.GUILD_ID || '').trim();
+    const kind = String(req.body.kind || '');
+    if (!guildId) return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('No server'));
+    const cur = (await getWelcomeConfig(discordClient, guildId)) || {};
+    const patch = { ...cur };
+    if (kind === 'welcome') {
+      patch.enabled = false;
+      patch.channelId = null;
+      patch.welcomeMessage = '';
+      patch.welcomeStyle = 'text';
+    } else if (kind === 'goodbye') {
+      patch.goodbyeEnabled = false;
+      patch.goodbyeChannelId = null;
+      patch.leaveMessage = '';
+      patch.goodbyeStyle = 'embed';
+    } else {
+      return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent('Unknown kind'));
+    }
+    await saveWelcomeConfig(discordClient, guildId, patch);
     return res.redirect(
-      path('/dashboard/welcome') + '?saved=1&guildId=' + encodeURIComponent(guildId),
+      path('/dashboard/welcome') +
+        '?deleted=' +
+        encodeURIComponent(kind) +
+        '&guildId=' +
+        encodeURIComponent(guildId),
     );
   } catch (e) {
-    return res.redirect(
-      path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Add failed'),
-    );
+    return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Delete failed'));
   }
 });
 
@@ -2150,13 +2273,9 @@ app.post(path('/dashboard/welcome'), requireAuth, express.urlencoded({ extended:
         : String(req.body.leaveMessage || '').slice(0, 4000),
     };
     await saveWelcomeConfig(discordClient, guildId, patch);
-    return res.redirect(
-      path('/dashboard/welcome') + '?saved=1&guildId=' + encodeURIComponent(guildId),
-    );
+    return res.redirect(path('/dashboard/welcome') + '?saved=1&guildId=' + encodeURIComponent(guildId));
   } catch (e) {
-    return res.redirect(
-      path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Save failed'),
-    );
+    return res.redirect(path('/dashboard/welcome') + '?err=' + encodeURIComponent(e.message || 'Save failed'));
   }
 });
 
