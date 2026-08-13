@@ -186,6 +186,7 @@ function layout(title, body, active = '', opts = {}) {
     ['giveaways', 'Giveaways', '🎁', path('/dashboard/giveaways')],
     ['welcome', 'Welcome', '👋', path('/dashboard/welcome')],
     ['messages', 'Messages', '✎', path('/dashboard/messages')],
+    ['nicknames', 'Nicknames', '🏷', path('/dashboard/nicknames')],
     ['maintenance', 'Maintenance', '⚙', path('/dashboard/maintenance')],
   ];
   const guildAdminAllowed = new Set(['dashboard', 'commands', 'welcome', 'polls', 'giveaways']);
@@ -3124,6 +3125,268 @@ app.post(path('/register'), express.urlencoded({ extended: true }), async (req, 
     return res.redirect(303, path('/dashboard'));
   } catch (e) {
     return res.status(500).send(String(e.message || e));
+  }
+});
+
+
+
+// ——— Nicknames dashboard (bot owner only) ———
+const NICK_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
+function nickDbKey(guildId, userId) {
+  return `nickname:${guildId}:${userId}`;
+}
+
+app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
+  if (typeof denyGuildAdmin === 'function' && denyGuildAdmin(req, res)) return;
+  if (req.dashRole === 'guild_admin') {
+    return res.status(403).send(layoutFor(req, 'Forbidden', '<p class="err">Owner only.</p>', ''));
+  }
+  try {
+    const token = getCookie(req, 'yuri_dash');
+    const sess = sessions.get(token) || {};
+    const guilds = [...(discordClient?.guilds?.cache?.values?.() || [])]
+      .map((g) => ({ id: g.id, name: g.name, members: g.memberCount }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const guildId =
+      String(req.query.guildId || sess.guildId || process.env.GUILD_ID || '').trim() ||
+      (guilds[0] && guilds[0].id) ||
+      '';
+    if (guildId && sess) sess.guildId = guildId;
+
+    const flash = req.query.ok
+      ? `<p class="ok">${escapeHtml(String(req.query.ok))}</p>`
+      : req.query.err
+        ? `<p class="err">${escapeHtml(String(req.query.err))}</p>`
+        : '';
+
+    const guildOptions = guilds
+      .map(
+        (g) =>
+          `<option value="${escapeHtml(g.id)}"${g.id === guildId ? ' selected' : ''}>${escapeHtml(g.name)} (${g.members})</option>`,
+      )
+      .join('');
+
+    let rows = '';
+    let total = 0;
+    const guild = guildId ? discordClient?.guilds?.cache?.get(guildId) : null;
+
+    if (guild) {
+      const dbEntries = [];
+      try {
+        if (discordClient.db?.list) {
+          const found = await discordClient.db.list(`nickname:${guildId}:`);
+          for (const item of found || []) {
+            const key = item.key || item.id || item._id || '';
+            const uid = String(key).split(':').pop();
+            const val = item.value != null ? item.value : item;
+            if (uid && uid !== guildId) {
+              dbEntries.push({ userId: uid, ...(typeof val === 'object' && val && !Array.isArray(val) ? val : {}) });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('nick list', e.message);
+      }
+
+      const memberMap = new Map();
+      try {
+        if ((guild.memberCount || 0) <= 500) {
+          await guild.members.fetch().catch(() => null);
+        }
+        for (const m of guild.members.cache.values()) {
+          if (m.user?.bot) continue;
+          memberMap.set(m.id, m);
+        }
+      } catch (_) {}
+
+      const ids = new Set(dbEntries.map((e) => e.userId));
+      for (const [id, m] of memberMap) {
+        if (m.nickname) ids.add(id);
+      }
+
+      const list = [];
+      for (const id of ids) {
+        const m = memberMap.get(id);
+        const db = dbEntries.find((e) => e.userId === id) || {};
+        list.push({
+          userId: id,
+          tag: m?.user?.tag || db.tag || id,
+          nick: m?.nickname || db.nickname || null,
+          lastChangedAt: Number(db.lastChangedAt) || 0,
+        });
+      }
+      list.sort((a, b) => String(a.nick || a.tag).localeCompare(String(b.nick || b.tag)));
+      total = list.length;
+
+      rows = list
+        .map((u) => {
+          const cd = u.lastChangedAt ? u.lastChangedAt + NICK_COOLDOWN_MS - Date.now() : 0;
+          const cdTxt = cd > 0 ? `${Math.ceil(cd / 3600000)}h left` : 'ready';
+          return `<tr>
+            <td style="padding:8px 6px;vertical-align:top"><code>${escapeHtml(u.userId)}</code><br/><span class="muted">${escapeHtml(u.tag)}</span></td>
+            <td style="padding:8px 6px;vertical-align:top">${escapeHtml(u.nick || '—')}</td>
+            <td style="padding:8px 6px;vertical-align:top" class="muted">${escapeHtml(cdTxt)}</td>
+            <td style="padding:8px 6px">
+              <form method="post" action="${path('/dashboard/nicknames/set')}" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <input type="hidden" name="guildId" value="${escapeHtml(guildId)}"/>
+                <input type="hidden" name="userId" value="${escapeHtml(u.userId)}"/>
+                <input type="text" name="nickname" value="${escapeHtml(u.nick || '')}" maxlength="32" placeholder="nickname" style="width:140px"/>
+                <button class="btn" type="submit" style="padding:6px 10px;font-size:11px">Save</button>
+                <button class="btn-danger" type="submit" name="clear" value="1" style="padding:6px 10px;font-size:11px">Clear</button>
+              </form>
+            </td>
+          </tr>`;
+        })
+        .join('');
+    }
+
+    res.send(
+      layoutFor(
+        req,
+        'Nicknames',
+        `<h1 class="section-title">Nicknames</h1>
+        ${flash}
+        <div class="card">
+          <h2>Select server</h2>
+          <form method="get" action="${path('/dashboard/nicknames')}">
+            <select name="guildId" onchange="this.form.submit()">${guildOptions || '<option value="">No servers</option>'}</select>
+          </form>
+          <p class="muted" style="margin-top:8px">Bot owner only · not shown to server managers. Lists Discord nicks + Mongo cooldown records.</p>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h2>Set by user ID</h2>
+          <form method="post" action="${path('/dashboard/nicknames/set')}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <input type="hidden" name="guildId" value="${escapeHtml(guildId)}"/>
+            <div style="flex:1;min-width:160px">
+              <label>User ID</label>
+              <input type="text" name="userId" required placeholder="Discord user ID" style="width:100%"/>
+            </div>
+            <div style="flex:1;min-width:160px">
+              <label>Nickname</label>
+              <input type="text" name="nickname" maxlength="32" placeholder="Max 32 chars" style="width:100%"/>
+            </div>
+            <button class="btn" type="submit">Save</button>
+            <button class="btn-danger" type="submit" name="clear" value="1">Clear</button>
+          </form>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h2>Members with nicknames (${total})</h2>
+          <div style="overflow:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="text-align:left;color:var(--muted)">
+                  <th style="padding:8px 6px">User</th>
+                  <th style="padding:8px 6px">Nickname</th>
+                  <th style="padding:8px 6px">Cooldownoldown</th>
+                  <th style="padding:8px 6px">Edit</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || '<tr><td colspan="4" class="muted" style="padding:12px">No nicknames found for this server yet. Use set by user ID or /nickname in Discord.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>`,
+        'nicknames',
+      ),
+    );
+  } catch (e) {
+    res.status(500).send('Nicknames page error: ' + (e.message || e));
+  }
+});
+
+app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    if (req.dashRole === 'guild_admin') {
+      return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Owner only'));
+    }
+    const guildId = String(req.body.guildId || '').trim();
+    const userId = String(req.body.userId || '').trim();
+    const clear = req.body.clear === '1';
+    let nickname = String(req.body.nickname || '').trim().slice(0, 32);
+    if (clear) nickname = '';
+
+    if (!guildId || !userId) {
+      return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Missing guild/user'));
+    }
+
+    const guild = discordClient?.guilds?.cache?.get(guildId);
+    if (!guild) {
+      return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Guild not found'));
+    }
+
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) {
+      return res.redirect(
+        path('/dashboard/nicknames') +
+          '?guildId=' +
+          encodeURIComponent(guildId) +
+          '&err=' +
+          encodeURIComponent('Member not in server'),
+      );
+    }
+    if (member.id === guild.ownerId) {
+      return res.redirect(
+        path('/dashboard/nicknames') +
+          '?guildId=' +
+          encodeURIComponent(guildId) +
+          '&err=' +
+          encodeURIComponent("Can't change server owner nickname (Discord rule)"),
+      );
+    }
+
+    const me = guild.members.me;
+    try {
+      if (me && me.roles.highest.comparePositionTo(member.roles.highest) <= 0) {
+        return res.redirect(
+          path('/dashboard/nicknames') +
+            '?guildId=' +
+            encodeURIComponent(guildId) +
+            '&err=' +
+            encodeURIComponent('Bot role must be higher than member'),
+        );
+      }
+      await member.setNickname(nickname || null, 'Dashboard nickname edit');
+    } catch (e) {
+      return res.redirect(
+        path('/dashboard/nicknames') +
+          '?guildId=' +
+          encodeURIComponent(guildId) +
+          '&err=' +
+          encodeURIComponent(e.message || 'setNickname failed'),
+      );
+    }
+
+    const key = nickDbKey(guildId, userId);
+    let prev = {};
+    try {
+      if (discordClient.db?.get) prev = (await discordClient.db.get(key, {})) || {};
+    } catch (_) {}
+    const history = Array.isArray(prev.history) ? prev.history : [];
+    history.push({ nick: nickname || null, at: Date.now(), by: 'dashboard' });
+    const payload = {
+      nickname: nickname || null,
+      lastChangedAt: Date.now(),
+      history: history.slice(-20),
+      tag: member.user?.tag || null,
+      updatedAt: Date.now(),
+    };
+    try {
+      if (discordClient.db?.set) await discordClient.db.set(key, payload);
+    } catch (_) {}
+
+    return res.redirect(
+      path('/dashboard/nicknames') +
+        '?guildId=' +
+        encodeURIComponent(guildId) +
+        '&ok=' +
+        encodeURIComponent(nickname ? 'Nickname saved' : 'Nickname cleared'),
+    );
+  } catch (e) {
+    return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent(e.message || 'Failed'));
   }
 });
 
