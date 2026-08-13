@@ -1993,25 +1993,37 @@ app.get(path('/dashboard/giveaways'), requireAuth, async (req, res) => {
       'Giveaways',
       `<h1>Giveaways</h1>
       <div class="card">
-        <h2>Create giveaway</h2>
-        <form method="post" action="${path('/dashboard/giveaways/create')}">
-          <input type="hidden" name="guildId" value="${escapeHtml(getSessionGuildId(req) || '')}"/>
-          <label>Channel ID</label>
-          <input type="text" name="channelId" required placeholder="Channel ID" style="width:100%;margin-bottom:8px"/>
-          <label>Prize</label>
-          <input type="text" name="prize" maxlength="200" required style="width:100%;margin-bottom:8px"/>
-          <label>Description (optional)</label>
-          <textarea name="description" rows="3" style="width:100%;margin-bottom:8px"></textarea>
-          <label>Duration</label>
-          <input type="text" name="duration" value="1h" placeholder="30m / 2h / 1d" style="width:100%;margin-bottom:8px"/>
-          <label>Winners</label>
-          <input type="number" name="winners" value="1" min="1" max="20" style="width:100%;margin-bottom:8px"/>
-          <label>Min level (optional)</label>
-          <input type="number" name="minLevel" min="0" max="1000" placeholder="none" style="width:100%;margin-bottom:8px"/>
-          <label>Style</label>
-          <select name="displayStyle"><option value="embed">Card (embed)</option><option value="text">Text only</option><option value="both">Text + card</option></select>
-          <div style="margin-top:12px"><button class="btn" type="submit">Create giveaway</button></div>
-        </form>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+          <h2 style="margin:0">Create</h2>
+          <button type="button" class="btn" id="toggleGwCreate" onclick="var p=document.getElementById('gwCreatePanel');var on=p.style.display==='none';p.style.display=on?'block':'none';this.textContent=on?'Close create':'＋ Create giveaway'">＋ Create giveaway</button>
+        </div>
+        <div id="gwCreatePanel" style="display:none;margin-top:14px">
+          <form method="post" action="${path('/dashboard/giveaways/create')}">
+            <input type="hidden" name="guildId" value="${escapeHtml(getSessionGuildId(req) || '')}"/>
+            <label>Channel (#name or ID)</label>
+            <input type="text" name="channel" required placeholder="#giveaways or channel ID" style="width:100%;margin-bottom:8px"/>
+            <label>Title</label>
+            <input type="text" name="title" maxlength="200" required placeholder="Giveaway title" style="width:100%;margin-bottom:8px"/>
+            <label>Prize</label>
+            <input type="text" name="prize" maxlength="200" required style="width:100%;margin-bottom:8px"/>
+            <label>Description (optional)</label>
+            <textarea name="description" rows="3" maxlength="1000" style="width:100%;margin-bottom:8px"></textarea>
+            <label>Duration</label>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+              <div><label style="font-size:10px">Days</label><input type="number" name="days" min="0" max="30" value="0" style="width:100%"/></div>
+              <div><label style="font-size:10px">Hours</label><input type="number" name="hours" min="0" max="23" value="1" style="width:100%"/></div>
+              <div><label style="font-size:10px">Minutes</label><input type="number" name="minutes" min="0" max="59" value="0" style="width:100%"/></div>
+              <div><label style="font-size:10px">Seconds</label><input type="number" name="seconds" min="0" max="59" value="0" style="width:100%"/></div>
+            </div>
+            <label>Winners</label>
+            <input type="number" name="winners" value="1" min="1" max="20" style="width:100%;margin-bottom:8px"/>
+            <label>Min level (optional)</label>
+            <input type="number" name="minLevel" min="0" max="1000" placeholder="none" style="width:100%;margin-bottom:8px"/>
+            <label>Style</label>
+            <select name="displayStyle"><option value="embed">Card (embed)</option><option value="text">Text only</option><option value="both">Text + card</option></select>
+            <div style="margin-top:12px"><button class="btn" type="submit">Create giveaway</button></div>
+          </form>
+        </div>
       </div>
 
       <div class="banner"><div class="cap">Giveaway chamber<small>Server-rendered · auto-refresh every 8s</small></div></div>
@@ -2207,26 +2219,38 @@ app.get(path('/dashboard/polls'), requireAuth, async (req, res) => {
       'Polls',
       `<h1>Polls</h1>
       <div class="card">
-        <h2>Create poll</h2>
-        <form method="post" action="${path('/dashboard/polls/create')}">
-          <input type="hidden" name="guildId" value="${escapeHtml(getSessionGuildId(req) || '')}"/>
-          <label>Channel ID</label>
-          <input type="text" name="channelId" required placeholder="Right-click channel → Copy Channel ID" style="width:100%;margin-bottom:8px"/>
-          <label>Question</label>
-          <input type="text" name="question" maxlength="200" required style="width:100%;margin-bottom:8px"/>
-          <label>Options (one per line, min 2)</label>
-          <textarea name="options" id="pollOptsBox" rows="5" required placeholder="Option A\nOption B" style="width:100%;margin-bottom:6px"></textarea>
-          <button type="button" class="btn secondary" style="margin-bottom:10px" onclick="var t=document.getElementById('pollOptsBox');t.value+=(t.value && !t.value.endsWith('\n') ? '\n' : '') + 'New option';">+ Add option</button>
-          <label>Duration</label>
-          <input type="text" name="duration" value="60" placeholder="60 / 90s / 2h / 1d" style="width:100%;margin-bottom:8px"/>
-          <label>Live vote counts</label>
-          <select name="showCounts"><option value="0">Hidden until end</option><option value="1">Show live counts</option></select>
-          <label>Style</label>
-          <select name="displayStyle"><option value="embed">Card (embed)</option><option value="text">Text only</option><option value="both">Text + card</option></select>
-          <label>On tie</label>
-          <select name="tieBreak"><option value="keep">Announce as tie</option><option value="random">Random winner among tied (50/50)</option></select>
-          <div style="margin-top:12px"><button class="btn" type="submit">Create poll</button></div>
-        </form>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+          <h2 style="margin:0">Polls</h2>
+          <button type="button" class="btn" id="togglePollCreate" onclick="var p=document.getElementById('pollCreatePanel');var on=p.style.display==='none';p.style.display=on?'block':'none';this.textContent=on?'Close create':'＋ Create poll'">＋ Create poll</button>
+        </div>
+        <div id="pollCreatePanel" style="display:none;margin-top:14px">
+          <form method="post" action="${path('/dashboard/polls/create')}">
+            <input type="hidden" name="guildId" value="${escapeHtml(getSessionGuildId(req) || '')}"/>
+            <label>Channel (#name or ID)</label>
+            <input type="text" name="channel" required placeholder="#polls or channel ID" style="width:100%;margin-bottom:8px"/>
+            <label>Title</label>
+            <input type="text" name="title" maxlength="200" required placeholder="Poll title" style="width:100%;margin-bottom:8px"/>
+            <label>Description (optional)</label>
+            <textarea name="description" rows="3" maxlength="1000" placeholder="Extra details shown under the title" style="width:100%;margin-bottom:8px"></textarea>
+            <label>Options (one per line, min 2)</label>
+            <textarea name="options" id="pollOptsBox" rows="5" required placeholder="Option A&#10;Option B" style="width:100%;margin-bottom:6px"></textarea>
+            <button type="button" class="btn secondary" style="margin-bottom:10px" onclick="var t=document.getElementById('pollOptsBox');t.value+=(t.value && !t.value.endsWith('\\n') ? '\\n' : '') + 'New option';">+ Add option</button>
+            <label>Duration</label>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+              <div><label style="font-size:10px">Days</label><input type="number" name="days" min="0" max="30" value="0" style="width:100%"/></div>
+              <div><label style="font-size:10px">Hours</label><input type="number" name="hours" min="0" max="23" value="0" style="width:100%"/></div>
+              <div><label style="font-size:10px">Minutes</label><input type="number" name="minutes" min="0" max="59" value="60" style="width:100%"/></div>
+              <div><label style="font-size:10px">Seconds</label><input type="number" name="seconds" min="0" max="59" value="0" style="width:100%"/></div>
+            </div>
+            <label>Live vote counts</label>
+            <select name="showCounts"><option value="0">Hidden until end</option><option value="1">Show live counts</option></select>
+            <label>Style</label>
+            <select name="displayStyle"><option value="embed">Card (embed)</option><option value="text">Text only</option><option value="both">Text + card</option></select>
+            <label>On tie</label>
+            <select name="tieBreak"><option value="keep">Announce as tie</option><option value="random">Random winner among tied (50/50)</option></select>
+            <div style="margin-top:12px"><button class="btn" type="submit">Create poll</button></div>
+          </form>
+        </div>
       </div>
       <div class="banner"><div class="cap">Poll chamber<small>Checks Discord on load · deleted messages drop here</small></div></div>
       <div class="row" style="margin-bottom:14px;flex-wrap:wrap">
@@ -3781,61 +3805,80 @@ app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ ext
 
 
 
+
 app.post(path('/dashboard/polls/create'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const guildId = String(req.body.guildId || getSessionGuildId(req) || '').trim();
-    const channelId = String(req.body.channelId || '').trim();
-    const question = String(req.body.question || '').trim().slice(0, 200);
+    const channelRaw = String(req.body.channel || req.body.channelId || '').trim();
+    const title = String(req.body.title || req.body.question || '').trim().slice(0, 200);
+    const description = String(req.body.description || '').trim().slice(0, 1000);
     const optionsRaw = String(req.body.options || '');
-    const durationRaw = String(req.body.duration || '60').trim();
     const showCounts = req.body.showCounts === '1' || req.body.showCounts === 'on';
     const displayStyle = ['text', 'embed', 'both'].includes(req.body.displayStyle) ? req.body.displayStyle : 'embed';
     const tieBreak = req.body.tieBreak === 'random' ? 'random' : 'keep';
 
-    if (!guildId || !channelId || !question) {
-      return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('Missing server/channel/question'));
+    if (!guildId || !channelRaw || !title) {
+      return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('Missing server/channel/title'));
     }
     const labels = optionsRaw.split(/\r?\n|\|/).map((s) => s.trim()).filter(Boolean).slice(0, 20);
     if (labels.length < 2) {
       return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('Need at least 2 options'));
     }
 
-    // duration parse
-    let totalSec = 0;
-    const s = durationRaw.toLowerCase();
-    if (/^\d+$/.test(s)) totalSec = parseInt(s, 10) * 60;
-    else {
-      const d = s.match(/(\d+)\s*d/); const h = s.match(/(\d+)\s*h/); const m = s.match(/(\d+)\s*m/); const sec = s.match(/(\d+)\s*s/);
-      if (d) totalSec += parseInt(d[1],10)*86400;
-      if (h) totalSec += parseInt(h[1],10)*3600;
-      if (m) totalSec += parseInt(m[1],10)*60;
-      if (sec) totalSec += parseInt(sec[1],10);
-    }
-    if (!totalSec || totalSec < 10) totalSec = 3600;
+    const days = Math.max(0, parseInt(req.body.days, 10) || 0);
+    const hours = Math.max(0, parseInt(req.body.hours, 10) || 0);
+    const minutes = Math.max(0, parseInt(req.body.minutes, 10) || 0);
+    const seconds = Math.max(0, parseInt(req.body.seconds, 10) || 0);
+    let totalSec = days * 86400 + hours * 3600 + minutes * 60 + seconds;
+    if (totalSec < 10) totalSec = 60;
 
     const guild = discordClient.guilds.cache.get(guildId);
-    const channel = await guild?.channels.fetch(channelId).catch(() => null);
-    if (!channel?.isTextBased?.()) {
-      return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('Invalid channel'));
+    if (!guild) {
+      return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('Guild not found'));
     }
 
-    const { randomBytes } = await import('crypto');
-    const { buildPollMessagePayload, savePoll, upsertOwnerPollCard } = await import('./services/pollService.js').catch(() => import('../services/pollService.js')).catch(() => ({}));
-    // try multiple paths
+    let channel = null;
+    if (/^\d{15,22}$/.test(channelRaw)) {
+      channel = await guild.channels.fetch(channelRaw).catch(() => null);
+    } else {
+      const name = channelRaw.replace(/^#/, '').toLowerCase();
+      channel =
+        guild.channels.cache.find(
+          (c) => c.isTextBased?.() && c.name?.toLowerCase() === name,
+        ) || null;
+      if (!channel) {
+        await guild.channels.fetch().catch(() => null);
+        channel = guild.channels.cache.find(
+          (c) => c.isTextBased?.() && c.name?.toLowerCase() === name,
+        ) || null;
+      }
+    }
+    if (!channel?.isTextBased?.()) {
+      return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('Invalid channel (use #name or ID)'));
+    }
+
     let pollSvc;
-    try { pollSvc = await import('../services/pollService.js'); } catch (_) {
-      try { pollSvc = await import('./services/pollService.js'); } catch (e) {
+    try {
+      pollSvc = await import('../services/pollService.js');
+    } catch (_) {
+      try {
+        pollSvc = await import('./services/pollService.js');
+      } catch (e) {
         return res.redirect(path('/dashboard/polls') + '?err=' + encodeURIComponent('pollService missing'));
       }
     }
 
+    const { randomBytes } = await import('crypto');
     const pollId = randomBytes(6).toString('hex');
+    const question = description ? `${title}\n\n${description}` : title;
     const poll = {
       id: pollId,
       guildId,
       channelId: channel.id,
       messageId: null,
-      question,
+      question: question.slice(0, 400),
+      title,
+      description,
       options: labels.map((label, i) => ({ id: i, label: label.slice(0, 80), votes: [] })),
       endsAt: Date.now() + totalSec * 1000,
       ended: false,
@@ -3858,36 +3901,49 @@ app.post(path('/dashboard/polls/create'), requireAuth, express.urlencoded({ exte
   }
 });
 
+
+
 app.post(path('/dashboard/giveaways/create'), requireAuth, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const guildId = String(req.body.guildId || getSessionGuildId(req) || '').trim();
-    const channelId = String(req.body.channelId || '').trim();
+    const channelRaw = String(req.body.channel || req.body.channelId || '').trim();
+    const title = String(req.body.title || '').trim().slice(0, 200);
     const prize = String(req.body.prize || '').trim().slice(0, 200);
-    const description = String(req.body.description || '').trim().slice(0, 500);
-    const durationRaw = String(req.body.duration || '1h').trim();
+    const description = String(req.body.description || '').trim().slice(0, 1000);
     const winners = Math.min(20, Math.max(1, parseInt(req.body.winners, 10) || 1));
     const displayStyle = ['text', 'embed', 'both'].includes(req.body.displayStyle) ? req.body.displayStyle : 'embed';
     const minLevel = req.body.minLevel !== '' && req.body.minLevel != null ? parseInt(req.body.minLevel, 10) : null;
 
-    if (!guildId || !channelId || !prize) {
+    if (!guildId || !channelRaw || !prize) {
       return res.redirect(path('/dashboard/giveaways') + '?err=' + encodeURIComponent('Missing fields'));
     }
 
-    let totalSec = 0;
-    const s = durationRaw.toLowerCase();
-    if (/^\d+$/.test(s)) totalSec = parseInt(s, 10) * 60;
-    else {
-      const d = s.match(/(\d+)\s*d/); const h = s.match(/(\d+)\s*h/); const m = s.match(/(\d+)\s*m/); const sec = s.match(/(\d+)\s*s/);
-      if (d) totalSec += parseInt(d[1],10)*86400;
-      if (h) totalSec += parseInt(h[1],10)*3600;
-      if (m) totalSec += parseInt(m[1],10)*60;
-      if (sec) totalSec += parseInt(sec[1],10);
-    }
+    const days = Math.max(0, parseInt(req.body.days, 10) || 0);
+    const hours = Math.max(0, parseInt(req.body.hours, 10) || 0);
+    const minutes = Math.max(0, parseInt(req.body.minutes, 10) || 0);
+    const seconds = Math.max(0, parseInt(req.body.seconds, 10) || 0);
+    let totalSec = days * 86400 + hours * 3600 + minutes * 60 + seconds;
     if (totalSec < 10) totalSec = 3600;
     const endsAt = Date.now() + totalSec * 1000;
 
     const guild = discordClient.guilds.cache.get(guildId);
-    const channel = await guild?.channels.fetch(channelId).catch(() => null);
+    if (!guild) {
+      return res.redirect(path('/dashboard/giveaways') + '?err=' + encodeURIComponent('Guild not found'));
+    }
+
+    let channel = null;
+    if (/^\d{15,22}$/.test(channelRaw)) {
+      channel = await guild.channels.fetch(channelRaw).catch(() => null);
+    } else {
+      const name = channelRaw.replace(/^#/, '').toLowerCase();
+      channel =
+        guild.channels.cache.find((c) => c.isTextBased?.() && c.name?.toLowerCase() === name) || null;
+      if (!channel) {
+        await guild.channels.fetch().catch(() => null);
+        channel =
+          guild.channels.cache.find((c) => c.isTextBased?.() && c.name?.toLowerCase() === name) || null;
+      }
+    }
     if (!channel?.isTextBased?.()) {
       return res.redirect(path('/dashboard/giveaways') + '?err=' + encodeURIComponent('Invalid channel'));
     }
@@ -3897,34 +3953,42 @@ app.post(path('/dashboard/giveaways/create'), requireAuth, express.urlencoded({ 
     const reqLines = [];
     if (minLevel != null && !Number.isNaN(minLevel)) reqLines.push(`📈 Level **${minLevel}+**`);
 
+    const head = title || '🎉 Giveaway';
     const embed = new EmbedBuilder()
       .setColor(0xff4655)
-      .setTitle('🎉 Giveaway')
+      .setTitle(head.slice(0, 256))
       .setDescription(
         `**Prize:** ${prize}\n` +
-        (description ? `${description}\n\n` : '') +
-        `**Winners:** ${winners}\n` +
-        `**Ends:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n` +
-        (reqLines.length ? `\n**Requirements**\n${reqLines.join('\n')}` : '\n_No special requirements_') +
-        `\n\nClick **Enter** to join!`,
+          (description ? `${description}\n\n` : '') +
+          `**Winners:** ${winners}\n` +
+          `**Ends:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n` +
+          (reqLines.length ? `\n**Requirements**\n${reqLines.join('\n')}` : '\n_No special requirements_') +
+          `\n\nClick **Enter** to join!`,
       )
       .setFooter({ text: 'Hosted from dashboard' })
       .setTimestamp(endsAt);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`gw_enter:${giveawayId}`).setLabel('Enter').setEmoji('🎉').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`gw_enter:${giveawayId}`)
+        .setLabel('Enter')
+        .setEmoji('🎉')
+        .setStyle(ButtonStyle.Primary),
     );
 
     let payload;
     if (displayStyle === 'text') {
       payload = {
-        content: `🎉 **Giveaway: ${prize}**\nWinners: ${winners}\nEnds <t:${Math.floor(endsAt / 1000)}:R>\nClick **Enter** to join!`,
+        content:
+          `🎉 **${head}**\n**Prize:** ${prize}\n` +
+          (description ? `${description}\n` : '') +
+          `Winners: ${winners}\nEnds <t:${Math.floor(endsAt / 1000)}:R>\nClick **Enter** to join!`,
         embeds: [],
         components: [row],
       };
     } else if (displayStyle === 'both') {
       payload = {
-        content: `🎉 **Giveaway: ${prize}** — ends <t:${Math.floor(endsAt / 1000)}:R>`,
+        content: `🎉 **${head}** — ends <t:${Math.floor(endsAt / 1000)}:R>`,
         embeds: [embed],
         components: [row],
       };
@@ -3938,6 +4002,7 @@ app.post(path('/dashboard/giveaways/create'), requireAuth, express.urlencoded({ 
       guildId,
       channelId: channel.id,
       messageId: msg.id,
+      title: head,
       prize,
       description,
       winners,
@@ -3966,6 +4031,7 @@ app.post(path('/dashboard/giveaways/create'), requireAuth, express.urlencoded({ 
     return res.redirect(path('/dashboard/giveaways') + '?err=' + encodeURIComponent(e.message || 'Create failed'));
   }
 });
+
 
 
 export function startServer(client) {
