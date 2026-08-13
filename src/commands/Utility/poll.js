@@ -15,20 +15,32 @@ export default {
     .addChannelOption((o) =>
       o
         .setName('channel')
-        .setDescription('Where to post the poll (default: this channel)')
+        .setDescription('Where to post the poll')
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
     )
-    .addRoleOption((o) =>
+    .addBooleanOption((o) =>
       o
-        .setName('mention_role')
-        .setDescription('Ping a role when the poll is posted')
-        .setRequired(false),
+        .setName('show_votes')
+        .setDescription('Show live vote counts? (default: hidden until end)'),
     )
-    .addUserOption((o) =>
+    .addStringOption((o) =>
       o
-        .setName('mention_user')
-        .setDescription('Ping a user when the poll is posted')
-        .setRequired(false),
+        .setName('style')
+        .setDescription('Message style')
+        .addChoices(
+          { name: 'Card (embed)', value: 'embed' },
+          { name: 'Text only', value: 'text' },
+          { name: 'Text + card', value: 'both' },
+        ),
+    )
+    .addStringOption((o) =>
+      o
+        .setName('on_tie')
+        .setDescription('If votes tie when the poll ends')
+        .addChoices(
+          { name: 'Keep as tie', value: 'keep' },
+          { name: 'Random / 50-50 gamble among tied', value: 'random' },
+        ),
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
@@ -37,43 +49,52 @@ export default {
   async execute(interaction) {
     const channel =
       interaction.options.getChannel('channel') || interaction.channel;
-    const mentionRole = interaction.options.getRole('mention_role');
-    const mentionUser = interaction.options.getUser('mention_user');
-    const meta = [channel.id, mentionRole?.id || '', mentionUser?.id || ''].join('|');
+    const showVotes = interaction.options.getBoolean('show_votes') || false;
+    const style = interaction.options.getString('style') || 'embed';
+    const onTie = interaction.options.getString('on_tie') || 'keep';
+
+    const meta = [channel.id, showVotes ? '1' : '0', style, onTie].join('|');
 
     const modal = new ModalBuilder()
       .setCustomId(`poll_modal:${meta}`)
       .setTitle('Create poll');
 
-    const question = new TextInputBuilder()
-      .setCustomId('question')
-      .setLabel('Question')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setMaxLength(200)
-      .setPlaceholder('e.g. Best agent this act?');
-
-    const options = new TextInputBuilder()
-      .setCustomId('options')
-      .setLabel('Options (one per line, 2–20)')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true)
-      .setMaxLength(500)
-      .setPlaceholder('Reyna\nJett\nChamber\nOmen');
-
-    const duration = new TextInputBuilder()
-      .setCustomId('duration')
-      .setLabel('Duration (5m / 2h / 1d / 1w / 1mo / 1y)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setMaxLength(24)
-      .setPlaceholder('e.g. 1d or 2h30m or 1w')
-      .setValue('1h');
-
     modal.addComponents(
-      new ActionRowBuilder().addComponents(question),
-      new ActionRowBuilder().addComponents(options),
-      new ActionRowBuilder().addComponents(duration),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('question')
+          .setLabel('Question')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(200),
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('options')
+          .setLabel('Options (one per line, 2–20)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setMaxLength(500)
+          .setPlaceholder('Reyna\nJett\nChamber'),
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('minutes')
+          .setLabel('Duration (e.g. 60, 90s, 2h, 1d)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(12)
+          .setValue('60'),
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('settings')
+          .setLabel('Optional overrides (votes=yes style=both tie=random)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setMaxLength(80)
+          .setPlaceholder('Leave blank to use slash options'),
+      ),
     );
 
     await interaction.showModal(modal);
