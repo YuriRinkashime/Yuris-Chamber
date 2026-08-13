@@ -3390,10 +3390,49 @@ app.post(path('/register'), express.urlencoded({ extended: true }), async (req, 
 
 
 
+
 // ——— Nicknames dashboard (bot owner only) ———
 const NICK_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
 function nickDbKey(guildId, userId) {
   return `nickname:${guildId}:${userId}`;
+}
+
+async function resolveMember(guild, raw) {
+  const q = String(raw || '').trim();
+  if (!q) return null;
+  // User ID
+  if (/^\d{15,22}$/.test(q)) {
+    return guild.members.fetch(q).catch(() => null);
+  }
+  // Mention <@id>
+  const men = q.match(/^<@!?(\d+)>$/);
+  if (men) return guild.members.fetch(men[1]).catch(() => null);
+
+  // Ensure cache for small/medium guilds
+  try {
+    if ((guild.memberCount || 0) <= 1000) {
+      await guild.members.fetch().catch(() => null);
+    }
+  } catch (_) {}
+
+  const lower = q.toLowerCase().replace(/^@/, '');
+  const all = [...guild.members.cache.values()].filter((m) => !m.user?.bot);
+
+  // exact username / globalName / tag / displayName / nickname
+  let hit =
+    all.find((m) => m.user?.username?.toLowerCase() === lower) ||
+    all.find((m) => m.user?.globalName?.toLowerCase() === lower) ||
+    all.find((m) => m.user?.tag?.toLowerCase() === lower) ||
+    all.find((m) => m.nickname?.toLowerCase() === lower) ||
+    all.find((m) => m.displayName?.toLowerCase() === lower);
+  if (hit) return hit;
+
+  // partial match
+  hit =
+    all.find((m) => m.user?.username?.toLowerCase().includes(lower)) ||
+    all.find((m) => (m.user?.globalName || '').toLowerCase().includes(lower)) ||
+    all.find((m) => (m.nickname || '').toLowerCase().includes(lower));
+  return hit || null;
 }
 
 app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
@@ -3430,6 +3469,7 @@ app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
     let rows = '';
     let total = 0;
     const guild = guildId ? discordClient?.guilds?.cache?.get(guildId) : null;
+    let ownerId = guild?.ownerId || '';
 
     if (guild) {
       const dbEntries = [];
@@ -3441,7 +3481,10 @@ app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
             const uid = String(key).split(':').pop();
             const val = item.value != null ? item.value : item;
             if (uid && uid !== guildId) {
-              dbEntries.push({ userId: uid, ...(typeof val === 'object' && val && !Array.isArray(val) ? val : {}) });
+              dbEntries.push({
+                userId: uid,
+                ...(typeof val === 'object' && val && !Array.isArray(val) ? val : {}),
+              });
             }
           }
         }
@@ -3471,9 +3514,11 @@ app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
         const db = dbEntries.find((e) => e.userId === id) || {};
         list.push({
           userId: id,
-          tag: m?.user?.tag || db.tag || id,
+          tag: m?.user?.tag || m?.user?.username || db.tag || id,
+          username: m?.user?.username || '',
           nick: m?.nickname || db.nickname || null,
           lastChangedAt: Number(db.lastChangedAt) || 0,
+          isOwner: id === ownerId,
         });
       }
       list.sort((a, b) => String(a.nick || a.tag).localeCompare(String(b.nick || b.tag)));
@@ -3483,20 +3528,26 @@ app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
         .map((u) => {
           const cd = u.lastChangedAt ? u.lastChangedAt + NICK_COOLDOWN_MS - Date.now() : 0;
           const cdTxt = cd > 0 ? `${Math.ceil(cd / 3600000)}h left` : 'ready';
-          return `<tr>
-            <td style="padding:8px 6px;vertical-align:top"><code>${escapeHtml(u.userId)}</code><br/><span class="muted">${escapeHtml(u.tag)}</span></td>
-            <td style="padding:8px 6px;vertical-align:top">${escapeHtml(u.nick || '—')}</td>
-            <td style="padding:8px 6px;vertical-align:top" class="muted">${escapeHtml(cdTxt)}</td>
-            <td style="padding:8px 6px">
-              <form method="post" action="${path('/dashboard/nicknames/set')}" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <input type="hidden" name="guildId" value="${escapeHtml(guildId)}"/>
-                <input type="hidden" name="userId" value="${escapeHtml(u.userId)}"/>
-                <input type="text" name="nickname" value="${escapeHtml(u.nick || '')}" maxlength="32" placeholder="nickname" style="width:140px"/>
-                <button class="btn" type="submit" style="padding:6px 10px;font-size:11px">Save</button>
-                <button class="btn-danger" type="submit" name="clear" value="1" style="padding:6px 10px;font-size:11px">Clear</button>
-              </form>
-            </td>
-          </tr>`;
+          const ownerBadge = u.isOwner
+            ? '<span class="badge badge-miss" style="margin-left:6px">SERVER OWNER</span>'
+            : '';
+          return `<div class="nick-row">
+            <div class="nick-meta">
+              <div class="nick-name">${escapeHtml(u.nick || '—')}${ownerBadge}</div>
+              <div class="muted">@${escapeHtml(u.username || u.tag)} · <code>${escapeHtml(u.userId)}</code></div>
+              <div class="muted">Cooldownoldown: ${escapeHtml(cdTxt)}</div>
+            </div>
+            <form method="post" action="${path('/dashboard/nicknames/set')}" class="nick-form">
+              <input type="hidden" name="guildId" value="${escapeHtml(guildId)}"/>
+              <input type="hidden" name="userId" value="${escapeHtml(u.userId)}"/>
+              <input type="text" name="nickname" value="${escapeHtml(u.nick || '')}" maxlength="32" placeholder="nickname" ${u.isOwner ? 'disabled' : ''}/>
+              <div class="nick-actions">
+                <button class="btn" type="submit" ${u.isOwner ? 'disabled' : ''}>Save</button>
+                <button class="btn-danger" type="submit" name="clear" value="1" ${u.isOwner ? 'disabled' : ''}>Clear</button>
+              </div>
+              ${u.isOwner ? '<p class="muted" style="margin:4px 0 0;font-size:11px">Discord blocks bots from changing the server owner nick. Change it in Discord settings.</p>' : ''}
+            </form>
+          </div>`;
         })
         .join('');
     }
@@ -3505,50 +3556,55 @@ app.get(path('/dashboard/nicknames'), requireAuth, async (req, res) => {
       layoutFor(
         req,
         'Nicknames',
-        `<h1 class="section-title">Nicknames</h1>
+        `<style>
+          .nick-row{display:flex;flex-direction:column;gap:10px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+          .nick-row:last-child{border-bottom:none}
+          .nick-name{font-family:var(--display);font-weight:700;font-size:16px;color:#fff}
+          .nick-form{display:flex;flex-direction:column;gap:8px}
+          .nick-form input[type=text]{width:100%;max-width:100%;box-sizing:border-box}
+          .nick-actions{display:flex;gap:8px;flex-wrap:wrap}
+          .nick-actions .btn,.nick-actions .btn-danger{flex:1;min-width:100px;text-align:center}
+          .nick-set-grid{display:flex;flex-direction:column;gap:10px}
+          @media(min-width:720px){
+            .nick-row{flex-direction:row;align-items:flex-start;justify-content:space-between;gap:16px}
+            .nick-meta{flex:1;min-width:0}
+            .nick-form{flex:1;max-width:360px}
+            .nick-set-grid{flex-direction:row;flex-wrap:wrap;align-items:flex-end}
+            .nick-set-grid > div{flex:1;min-width:180px}
+          }
+        </style>
+        <h1 class="section-title">Nicknames</h1>
         ${flash}
         <div class="card">
           <h2>Select server</h2>
           <form method="get" action="${path('/dashboard/nicknames')}">
             <select name="guildId" onchange="this.form.submit()">${guildOptions || '<option value="">No servers</option>'}</select>
           </form>
-          <p class="muted" style="margin-top:8px">Bot owner only · not shown to server managers. Lists Discord nicks + Mongo cooldown records.</p>
+          <p class="muted" style="margin-top:8px">Bot owner only. <strong>Discord does not allow bots to change the server owner's nickname</strong> — that must be done in Discord (Server settings / right‑click yourself).</p>
         </div>
 
         <div class="card" style="margin-top:12px">
-          <h2>Set by user ID</h2>
-          <form method="post" action="${path('/dashboard/nicknames/set')}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <h2>Set nickname</h2>
+          <form method="post" action="${path('/dashboard/nicknames/set')}" class="nick-set-grid">
             <input type="hidden" name="guildId" value="${escapeHtml(guildId)}"/>
-            <div style="flex:1;min-width:160px">
-              <label>User ID</label>
-              <input type="text" name="userId" required placeholder="Discord user ID" style="width:100%"/>
+            <div>
+              <label>Username or user ID</label>
+              <input type="text" name="user" required placeholder="@username or Discord ID" style="width:100%"/>
             </div>
-            <div style="flex:1;min-width:160px">
+            <div>
               <label>Nickname</label>
               <input type="text" name="nickname" maxlength="32" placeholder="Max 32 chars" style="width:100%"/>
             </div>
-            <button class="btn" type="submit">Save</button>
-            <button class="btn-danger" type="submit" name="clear" value="1">Clear</button>
+            <div class="nick-actions" style="width:100%">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn-danger" type="submit" name="clear" value="1">Clear</button>
+            </div>
           </form>
         </div>
 
         <div class="card" style="margin-top:12px">
           <h2>Members with nicknames (${total})</h2>
-          <div style="overflow:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
-              <thead>
-                <tr style="text-align:left;color:var(--muted)">
-                  <th style="padding:8px 6px">User</th>
-                  <th style="padding:8px 6px">Nickname</th>
-                  <th style="padding:8px 6px">Cooldownoldown</th>
-                  <th style="padding:8px 6px">Edit</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows || '<tr><td colspan="4" class="muted" style="padding:12px">No nicknames found for this server yet. Use set by user ID or /nickname in Discord.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
+          ${rows || '<p class="muted">No nicknames found yet. Use the form above or /nickname in Discord.</p>'}
         </div>`,
         'nicknames',
       ),
@@ -3564,13 +3620,12 @@ app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ ext
       return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Owner only'));
     }
     const guildId = String(req.body.guildId || '').trim();
-    const userId = String(req.body.userId || '').trim();
     const clear = req.body.clear === '1';
     let nickname = String(req.body.nickname || '').trim().slice(0, 32);
     if (clear) nickname = '';
 
-    if (!guildId || !userId) {
-      return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Missing guild/user'));
+    if (!guildId) {
+      return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Missing server'));
     }
 
     const guild = discordClient?.guilds?.cache?.get(guildId);
@@ -3578,23 +3633,48 @@ app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ ext
       return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent('Guild not found'));
     }
 
-    const member = await guild.members.fetch(userId).catch(() => null);
+    // userId field OR user (username / id)
+    let userRaw = String(req.body.userId || req.body.user || '').trim();
+    const member = await resolveMember(guild, userRaw);
     if (!member) {
       return res.redirect(
         path('/dashboard/nicknames') +
           '?guildId=' +
           encodeURIComponent(guildId) +
           '&err=' +
-          encodeURIComponent('Member not in server'),
+          encodeURIComponent('Member not found — try exact username or user ID'),
       );
     }
+
     if (member.id === guild.ownerId) {
+      // Still save preferred nick to Mongo for records, but Discord API cannot apply it
+      const key = nickDbKey(guildId, member.id);
+      let prev = {};
+      try {
+        if (discordClient.db?.get) prev = (await discordClient.db.get(key, {})) || {};
+      } catch (_) {}
+      const history = Array.isArray(prev.history) ? prev.history : [];
+      history.push({ nick: nickname || null, at: Date.now(), by: 'dashboard', note: 'owner_blocked' });
+      try {
+        if (discordClient.db?.set) {
+          await discordClient.db.set(key, {
+            nickname: nickname || null,
+            lastChangedAt: Date.now(),
+            history: history.slice(-20),
+            tag: member.user?.tag || null,
+            updatedAt: Date.now(),
+            ownerBlocked: true,
+          });
+        }
+      } catch (_) {}
       return res.redirect(
         path('/dashboard/nicknames') +
           '?guildId=' +
           encodeURIComponent(guildId) +
           '&err=' +
-          encodeURIComponent("Can't change server owner nickname (Discord rule)"),
+          encodeURIComponent(
+            "Discord blocks bots from changing the server owner's nickname. Change it yourself in Discord (click your name → Edit Server Profile).",
+          ),
       );
     }
 
@@ -3606,7 +3686,7 @@ app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ ext
             '?guildId=' +
             encodeURIComponent(guildId) +
             '&err=' +
-            encodeURIComponent('Bot role must be higher than member'),
+            encodeURIComponent('Bot role must be higher than that member'),
         );
       }
       await member.setNickname(nickname || null, 'Dashboard nickname edit');
@@ -3620,22 +3700,23 @@ app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ ext
       );
     }
 
-    const key = nickDbKey(guildId, userId);
+    const key = nickDbKey(guildId, member.id);
     let prev = {};
     try {
       if (discordClient.db?.get) prev = (await discordClient.db.get(key, {})) || {};
     } catch (_) {}
     const history = Array.isArray(prev.history) ? prev.history : [];
     history.push({ nick: nickname || null, at: Date.now(), by: 'dashboard' });
-    const payload = {
-      nickname: nickname || null,
-      lastChangedAt: Date.now(),
-      history: history.slice(-20),
-      tag: member.user?.tag || null,
-      updatedAt: Date.now(),
-    };
     try {
-      if (discordClient.db?.set) await discordClient.db.set(key, payload);
+      if (discordClient.db?.set) {
+        await discordClient.db.set(key, {
+          nickname: nickname || null,
+          lastChangedAt: Date.now(),
+          history: history.slice(-20),
+          tag: member.user?.tag || null,
+          updatedAt: Date.now(),
+        });
+      }
     } catch (_) {}
 
     return res.redirect(
@@ -3643,7 +3724,11 @@ app.post(path('/dashboard/nicknames/set'), requireAuth, express.urlencoded({ ext
         '?guildId=' +
         encodeURIComponent(guildId) +
         '&ok=' +
-        encodeURIComponent(nickname ? 'Nickname saved' : 'Nickname cleared'),
+        encodeURIComponent(
+          nickname
+            ? `Nickname set for @${member.user?.username || member.id}`
+            : `Nickname cleared for @${member.user?.username || member.id}`,
+        ),
     );
   } catch (e) {
     return res.redirect(path('/dashboard/nicknames') + '?err=' + encodeURIComponent(e.message || 'Failed'));
