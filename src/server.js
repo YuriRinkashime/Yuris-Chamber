@@ -915,6 +915,266 @@ body.nav-open .nav-backdrop{display:block !important}
   .nav-toggle{display:none !important}
 }
 
+
+/* ═══════════════════════════════════════════
+   VALORANT / CHAMBER THEME — full UI revamp
+   (does not remove features)
+   ═══════════════════════════════════════════ */
+:root{
+  --val:#ff4655;
+  --val-bright:#ff6b78;
+  --val-dim:rgba(255,70,85,.14);
+  --val-glow:rgba(255,70,85,.45);
+  --bg0:#0c0f14;
+  --bg1:#12161e;
+  --bg2:#181d28;
+  --panel:rgba(18,22,30,.92);
+  --panel2:rgba(24,29,40,.95);
+  --line:rgba(255,70,85,.22);
+  --line2:rgba(255,255,255,.08);
+  --text:#f4f6fa;
+  --muted:#9aa3b5;
+  --display:'Rajdhani',system-ui,sans-serif;
+  --font:system-ui,-apple-system,sans-serif;
+  --glow:rgba(255,70,85,.35);
+}
+
+html,body{
+  background-color:#0c0f14 !important;
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% -15%, rgba(255,70,85,.22), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(255,70,85,.08), transparent 50%),
+    radial-gradient(ellipse 45% 35% at 0% 100%, rgba(80,100,140,.08), transparent 55%),
+    linear-gradient(165deg, #0e1219 0%, #0c0f14 40%, #10151c 100%) !important;
+  background-attachment:fixed !important;
+  color:var(--text) !important;
+  min-height:100%;
+}
+body::before{
+  content:'' !important;
+  display:block !important;
+  position:fixed !important;
+  inset:0 !important;
+  pointer-events:none !important;
+  z-index:0 !important;
+  opacity:.4 !important;
+  background-image:
+    linear-gradient(115deg, transparent 0%, transparent 40%, rgba(255,70,85,.03) 50%, transparent 60%),
+    repeating-linear-gradient(
+      -12deg,
+      transparent,
+      transparent 80px,
+      rgba(255,70,85,.015) 80px,
+      rgba(255,70,85,.015) 81px
+    ) !important;
+  mask-image:radial-gradient(ellipse 80% 70% at 50% 40%, #000 20%, transparent 75%) !important;
+}
+body::after{
+  content:'' !important;
+  display:block !important;
+  position:fixed !important;
+  inset:0 !important;
+  pointer-events:none !important;
+  z-index:0 !important;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255,70,85,.06), transparent 25%),
+    radial-gradient(circle at 85% 75%, rgba(255,70,85,.05), transparent 30%) !important;
+  opacity:1 !important;
+}
+
+.shell, .shell-main, .login-screen{
+  position:relative;
+  z-index:1;
+}
+
+/* Top bar — glass + red edge */
+.top{
+  background:linear-gradient(180deg, rgba(16,20,28,.96), rgba(10,12,16,.9)) !important;
+  border-bottom:1px solid rgba(255,70,85,.35) !important;
+  box-shadow:
+    0 1px 0 rgba(255,70,85,.15),
+    0 12px 40px rgba(0,0,0,.5) !important;
+}
+.top::after{
+  content:'';
+  position:absolute; left:0; right:0; bottom:0; height:2px;
+  background:linear-gradient(90deg, transparent, #ff4655 20%, #ff4655 80%, transparent);
+  opacity:.7; pointer-events:none;
+}
+
+/* Cards — angled panel look */
+.card{
+  background:
+    linear-gradient(145deg, rgba(28,34,46,.95) 0%, rgba(16,20,28,.92) 100%) !important;
+  border:1px solid rgba(255,70,85,.28) !important;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.4),
+    0 16px 48px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.04) !important;
+  position:relative;
+}
+.card::before{
+  content:'';
+  position:absolute; top:0; left:0; width:4px; height:100%;
+  background:linear-gradient(180deg, #ff4655, transparent 70%);
+  opacity:.55; border-radius:1px 0 0 1px;
+  pointer-events:none;
+}
+
+/* Banner strips */
+.banner{
+  background:
+    linear-gradient(105deg, rgba(255,70,85,.2) 0%, rgba(18,22,30,.95) 45%, rgba(18,22,30,.9) 100%) !important;
+  border:1px solid rgba(255,70,85,.35) !important;
+  box-shadow:0 8px 32px rgba(255,70,85,.08) !important;
+}
+
+/* Typography accents */
+h1, .section-title{
+  color:#fff !important;
+  text-shadow:0 0 40px rgba(255,70,85,.15);
+}
+h2{
+  color:#ff6b78 !important;
+  letter-spacing:.14em !important;
+}
+.muted{color:#9aa3b5 !important}
+.ok{color:#5ddea0 !important}
+.err{color:#ff6b78 !important}
+
+/* Stats tiles */
+.stat, .intel-tile, .stat-grid > div{
+  background:rgba(8,10,14,.55) !important;
+  border:1px solid rgba(255,70,85,.2) !important;
+  box-shadow:inset 0 0 20px rgba(255,70,85,.03);
+}
+.stat .v, .intel-tile .v{
+  color:#ff4655 !important;
+  text-shadow:0 0 20px rgba(255,70,85,.35);
+}
+
+/* Buttons */
+.btn{
+  background:#ff4655 !important;
+  color:#fff !important;
+  border:none !important;
+  box-shadow:0 4px 20px rgba(255,70,85,.35) !important;
+  font-family:var(--display) !important;
+  letter-spacing:.08em !important;
+  text-transform:uppercase !important;
+  transition:transform .12s, box-shadow .12s !important;
+}
+.btn:hover{
+  filter:brightness(1.08);
+  box-shadow:0 6px 28px rgba(255,70,85,.5) !important;
+  transform:translateY(-1px);
+}
+.btn.secondary, .btn-danger{
+  background:transparent !important;
+  color:#ff8a94 !important;
+  border:1px solid rgba(255,70,85,.45) !important;
+  box-shadow:none !important;
+}
+.btn.secondary:hover, .btn-danger:hover{
+  background:rgba(255,70,85,.12) !important;
+  color:#fff !important;
+}
+
+/* Nav links */
+.nav-link.active{
+  background:#ff4655 !important;
+  box-shadow:0 0 20px rgba(255,70,85,.4) !important;
+}
+.nav-link:hover{
+  background:rgba(255,70,85,.12) !important;
+  color:#fff !important;
+}
+.top #mainNav, .top .nav{
+  background:rgba(0,0,0,.4) !important;
+  border:1px solid rgba(255,70,85,.25) !important;
+}
+
+/* Forms */
+input[type=text], input[type=password], input[type=number], textarea, select{
+  background:rgba(6,8,12,.75) !important;
+  border:1px solid rgba(255,70,85,.35) !important;
+  color:#f4f6fa !important;
+}
+input:focus, textarea:focus, select:focus{
+  border-color:#ff4655 !important;
+  box-shadow:0 0 0 2px rgba(255,70,85,.2) !important;
+}
+
+/* Toggles */
+.vtoggle.on{
+  background:#ff4655 !important;
+  color:#fff !important;
+  box-shadow:0 0 18px rgba(255,70,85,.4) !important;
+}
+.vtoggle.off{
+  background:rgba(255,255,255,.05) !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+  color:#9aa3b2 !important;
+}
+
+/* Command rows */
+.cmd-row{
+  background:rgba(0,0,0,.25) !important;
+  border:1px solid rgba(255,255,255,.06) !important;
+}
+.cmd-row.on{border-left:3px solid #ff4655 !important}
+.cmd-row.off{border-left:3px solid #4b5563 !important}
+
+/* Login */
+.login-card, .login-screen .login-card{
+  background:
+    linear-gradient(160deg, rgba(30,36,48,.98), rgba(14,18,26,.96)) !important;
+  border:1px solid rgba(255,70,85,.4) !important;
+  box-shadow:
+    0 0 60px rgba(255,70,85,.12),
+    0 24px 60px rgba(0,0,0,.55) !important;
+}
+.login-screen{
+  background:transparent !important;
+}
+
+/* Badges */
+.badge.on, .badge-on{
+  background:rgba(255,70,85,.15) !important;
+  color:#ff8a94 !important;
+  border-color:rgba(255,70,85,.4) !important;
+}
+.badge.off, .badge-off{
+  background:rgba(75,85,99,.3) !important;
+  color:#9aa3b2 !important;
+  border-color:rgba(75,85,99,.5) !important;
+}
+
+/* Credits / footer */
+.credits, .footer-note{
+  border-top:1px solid rgba(255,70,85,.15);
+  color:var(--muted);
+}
+.credits a{color:#ff6b78 !important}
+
+/* Scrollbar */
+*{scrollbar-color:rgba(255,70,85,.55) rgba(0,0,0,.35)}
+*::-webkit-scrollbar-thumb{background:rgba(255,70,85,.55) !important}
+*::-webkit-scrollbar-track{background:rgba(0,0,0,.35) !important}
+
+/* Tables */
+table th{color:#ff6b78 !important; border-bottom:1px solid rgba(255,70,85,.2)}
+table td{border-bottom:1px solid rgba(255,255,255,.04)}
+
+/* Mobile menu panel */
+@media (max-width:1200px){
+  .top #mainNav, .top .nav{
+    background:rgba(14,18,26,.98) !important;
+    border:1px solid rgba(255,70,85,.4) !important;
+    box-shadow:0 24px 60px rgba(0,0,0,.7), 0 0 40px rgba(255,70,85,.1) !important;
+  }
+}
+
 </style>
 </head>
 <body class="${isLogin ? 'is-login' : ''}">
